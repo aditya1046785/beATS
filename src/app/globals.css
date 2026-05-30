@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-heading: var(--font-sora), sans-serif;
+  --font-body: var(--font-dm), sans-serif;
+  --bg-primary: #080808;
+  --bg-secondary: #0f0f0f;
+  --bg-card: #141414;
+  --bg-card-hover: #1a1a1a;
+  --border-subtle: #1e1e1e;
+  --border-medium: #2a2a2a;
+  --border-blue: rgba(59, 130, 246, 0.25);
+  --accent-blue: #3b82f6;
+  --accent-blue-glow: rgba(59, 130, 246, 0.15);
+  --accent-green: #22c55e;
+  --accent-orange: #f97316;
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #555555;
+  --text-blue: #60a5fa;
+  --navbar-bg: rgba(8,8,8,0.85);
+  --hero-glow: rgba(59,130,246,0.04);
+}
+
+/* Light mode overrides */
+[data-theme="light"] {
+  --bg-primary:       #F8F8F6;
+  --bg-secondary:     #F2F2EF;
+  --bg-card:          #FFFFFF;
+  --bg-card-hover:    #F5F5F2;
+  --border-subtle:    #E4E4E0;
+  --border-medium:    #D0D0CA;
+  --border-blue:      rgba(59,130,246,0.2);
+
+  --accent-blue:      #2563EB;
+  --accent-blue-glow: rgba(37,99,235,0.12);
+  --accent-green:     #16A34A;
+  --accent-orange:    #EA580C;
+
+  --text-primary:     #0F0F0F;
+  --text-secondary:   #444444;
+  --text-muted:       #999999;
+  --text-blue:        #2563EB;
+
+  --navbar-bg: rgba(248,248,246,0.88);
+  --hero-glow: rgba(37,99,235,0.07);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 300ms ease, color 300ms ease;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.25);
+  color: #f0f0f0;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222222;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #333333;
+}
+
+.field {
+  width: 100%;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  background: #000;
+  color: #fff;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.field:focus {
+  border-color: #3b82f6;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(59, 130, 246, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
