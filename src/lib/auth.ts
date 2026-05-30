@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getUser } from "./store";
+import { getUser, saveUser } from "./store";
 
 const COOKIE_NAME = "pp_session";
 
@@ -28,7 +28,24 @@ export async function requireUser() {
   if (!userId) redirect("/");
   const user = await getUser(userId);
   if (!user) redirect("/");
-  return user;
+
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const planExpiryDate = user.planExpiryDate ? new Date(user.planExpiryDate) : null;
+  let nextUser = user;
+
+  if (user.monthTracker !== nowMonth) {
+    nextUser = { ...nextUser, monthTracker: nowMonth, resumesGeneratedThisMonth: 0 };
+  }
+
+  if (nextUser.planType === "pro" && planExpiryDate && Number.isFinite(planExpiryDate.getTime()) && planExpiryDate.getTime() < Date.now()) {
+    nextUser = { ...nextUser, planType: "free", planExpiryDate: undefined };
+  }
+
+  if (nextUser !== user) {
+    await saveUser(nextUser);
+  }
+
+  return nextUser;
 }
 
 export async function requireDashboardUser() {

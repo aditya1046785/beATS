@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setSession } from "@/lib/auth";
 import { exchangeCodeForToken, getGitHubProfile } from "@/lib/github";
-import { readData, writeData } from "@/lib/store";
+import { readData, saveUser } from "@/lib/store";
 import { UserProfile } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
@@ -33,14 +33,13 @@ export async function GET(request: NextRequest) {
       githubProcessing: false,
       createdAt: new Date().toISOString(),
     } satisfies UserProfile;
-    data.users.push(user);
   } else {
     user.githubAccessToken = token;
     user.name = profile.name;
     user.email = profile.email || user.email;
     user.avatarUrl = profile.avatarUrl;
   }
-  await writeData(data);
+  await saveUser(user);
   setSession(user.id);
   return NextResponse.redirect(`${request.nextUrl.origin}${user.onboardingComplete ? "/dashboard" : "/onboarding"}`);
 }

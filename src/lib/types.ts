@@ -32,11 +32,38 @@ export type UserProfile = {
 };
 
 export type RepoSummary = {
-  explanation: string;
-  skills: string[];
-  problem: string;
-  implementations: string[];
-  relevantRoles: string[];
+  one_liner: string;
+  tech_skills: {
+    languages: string[];
+    frameworks: string[];
+    tools: string[];
+    concepts: string[];
+  };
+  what_it_does: string;
+  notable_implementations: string[];
+  impact_or_scale: string | null;
+  relevant_roles: string[];
+};
+
+export type JobAnalysis = {
+  job_title: string;
+  company_name: string | null;
+  required_skills: string[];
+  preferred_skills: string[];
+  key_responsibilities: string[];
+  keywords: string[];
+  experience_level: string;
+  domain: string;
+};
+
+export type AtsAnalysis = {
+  ats_score: number;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  score_explanation: string;
+  domain_mismatch: boolean;
+  mismatch_reason: string | null;
+  recommended_roles: string[];
 };
 
 export type RepositoryRecord = {
@@ -63,6 +90,7 @@ export type ResumeRecord = {
   jobTitle: string;
   companyName: string;
   jdText: string;
+  jdEmbedding?: number[];
   selectedRepoIds: string[];
   generatedResumeContent: ResumeContent;
   generatedResumeHtml: string;
@@ -70,6 +98,9 @@ export type ResumeRecord = {
   atsMatchScore: number;
   atsMatchedKeywords: string[];
   atsMissedKeywords: string[];
+  atsDomainMismatch?: boolean;
+  atsMismatchReason?: string | null;
+  atsRecommendedRoles?: string[];
   generatedAt: string;
   templateUsed: string;
 };
@@ -83,6 +114,10 @@ export type PaymentRecord = {
   subscriptionStartDate: string;
   subscriptionEndDate: string;
   paymentStatus: string;
+  orderId?: string;
+  paymentId?: string;
+  signature?: string;
+  currency?: string;
 };
 
 export type ResumeContent = {

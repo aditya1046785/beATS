@@ -1,10 +1,170 @@
 import "server-only";
-import { promises as fs } from "fs";
 import { ResumeContent } from "./types";
 
 const asStringArray = (value: unknown) => (Array.isArray(value) ? value.map(String).filter(Boolean) : []);
 
+// Skills to skip: minor packages, utilities, and sub-tools
+const SKILLS_TO_SKIP = new Set([
+  // CSS utilities
+  "clsx",
+  "class-variance-authority",
+  "cva",
+  "classnames",
+  "classname",
+  // Date utilities
+  "date-fns",
+  "moment",
+  "dayjs",
+  // Icon libraries
+  "lucide react",
+  "lucide-react",
+  "react icons",
+  "react-icons",
+  "feather icons",
+  "feather-icons",
+  "@heroicons/react",
+  // Carousel/Slider libraries
+  "embla carousel",
+  "embla-carousel",
+  "swiper",
+  "react-slick",
+  // Environment tools
+  "dotenv",
+  "dotenv-webpack",
+  // Other utilities typically found in package.json
+  "uuid",
+  "lodash-es",
+  "axios", // too generic, usually covered by "API" or specific framework
+]);
+
+// Valid databases and ORMs (whitelist approach for databases)
+const VALID_DATABASES = new Set([
+  "postgresql",
+  "postgres",
+  "mongodb",
+  "mysql",
+  "firebase",
+  "firestore",
+  "redis",
+  "prisma",
+  "supabase",
+  "dynamodb",
+  "cassandra",
+  "elasticsearch",
+  "sqlalchemy",
+  "sequelize",
+  "typeorm",
+  "knex",
+  "drizzle",
+  "neo4j",
+  "cockroachdb",
+  "mariadb",
+  "oracle",
+  "sql server",
+  "ibm db2",
+  "realm",
+  "couchdb",
+  "fauna",
+  "planetscale",
+]);
+
+// UI libraries and styling tools to skip from Tools section
+const UI_LIBRARIES_TO_SKIP = new Set([
+  "react",
+  "vue",
+  "angular",
+  "svelte",
+  "nextjs",
+  "next.js",
+  "nuxt",
+  "gatsby",
+  "remix",
+  "tailwind",
+  "tailwindcss",
+  "bootstrap",
+  "material-ui",
+  "mui",
+  "@mui",
+  "chakra ui",
+  "chakra-ui",
+  "@chakra-ui",
+  "shadcn",
+  "shadcn/ui",
+  "ant design",
+  "antd",
+  "react bootstrap",
+  "styled-components",
+  "emotion",
+  "@emotion",
+  "sass",
+  "scss",
+  "less",
+  "css-in-js",
+  "storybook",
+]);
+
+function isValidDatabase(skill: string): boolean {
+  const normalized = skill.toLowerCase().trim();
+  return VALID_DATABASES.has(normalized);
+}
+
+function shouldSkipSkill(skill: string): boolean {
+  const normalized = skill.toLowerCase().trim();
+  return SKILLS_TO_SKIP.has(normalized);
+}
+
+function isUiLibrary(skill: string): boolean {
+  const normalized = skill.toLowerCase().trim();
+  return UI_LIBRARIES_TO_SKIP.has(normalized);
+}
+
+function normalizeSkillName(skill: string): string {
+  return skill.trim();
+}
+
+function filterAndDeduplicateSkills(
+  languages: string[],
+  frameworks: string[],
+  tools: string[],
+  databases: string[],
+): { programmingLanguages: string[]; frameworksLibraries: string[]; toolsTechnologies: string[]; databases: string[] } {
+  // Remove skipped skills and normalize
+  const cleanedLanguages = languages.filter((s) => !shouldSkipSkill(s)).map(normalizeSkillName);
+  const cleanedFrameworks = frameworks.filter((s) => !shouldSkipSkill(s)).map(normalizeSkillName);
+  let cleanedTools = tools.filter((s) => !shouldSkipSkill(s) && !isUiLibrary(s)).map(normalizeSkillName);
+  let cleanedDatabases = databases
+    .filter((s) => !shouldSkipSkill(s) && isValidDatabase(s))
+    .map(normalizeSkillName);
+
+  // Remove duplicates: create a set of all skills already listed
+  const seenSkills = new Set(
+    [...cleanedLanguages, ...cleanedFrameworks, ...cleanedDatabases].map((s) => s.toLowerCase()),
+  );
+
+  // Remove from tools any skill already in other categories
+  cleanedTools = cleanedTools.filter((tool) => !seenSkills.has(tool.toLowerCase()));
+
+  // Remove duplicate framework from tools (e.g., React appearing in both)
+  const frameworkNames = new Set(cleanedFrameworks.map((f) => f.toLowerCase()));
+  cleanedTools = cleanedTools.filter((tool) => !frameworkNames.has(tool.toLowerCase()));
+
+  return {
+    programmingLanguages: cleanedLanguages,
+    frameworksLibraries: cleanedFrameworks,
+    toolsTechnologies: cleanedTools,
+    databases: cleanedDatabases,
+  };
+}
+
 export function normalizeResumeContent(content: ResumeContent): ResumeContent {
+  // Filter and deduplicate skills
+  const filteredSkills = filterAndDeduplicateSkills(
+    asStringArray(content.technicalSkills?.programmingLanguages),
+    asStringArray(content.technicalSkills?.frameworksLibraries),
+    asStringArray(content.technicalSkills?.toolsTechnologies),
+    asStringArray(content.technicalSkills?.databases),
+  );
+
   return {
     header: {
       fullName: String(content.header?.fullName || ""),
@@ -24,10 +184,10 @@ export function normalizeResumeContent(content: ResumeContent): ResumeContent {
         }))
       : [],
     technicalSkills: {
-      programmingLanguages: asStringArray(content.technicalSkills?.programmingLanguages),
-      frameworksLibraries: asStringArray(content.technicalSkills?.frameworksLibraries),
-      toolsTechnologies: asStringArray(content.technicalSkills?.toolsTechnologies),
-      databases: asStringArray(content.technicalSkills?.databases),
+      programmingLanguages: filteredSkills.programmingLanguages,
+      frameworksLibraries: filteredSkills.frameworksLibraries,
+      toolsTechnologies: filteredSkills.toolsTechnologies,
+      databases: filteredSkills.databases,
     },
     projects: Array.isArray(content.projects)
       ? content.projects.slice(0, 4).map((project) => ({
@@ -129,34 +289,38 @@ li { margin: 2px 0; }
 </style></body></html>`;
 }
 
+export async function renderHtmlToPdf(html: string, absolutePath: string) {
+  const puppeteer = await import("puppeteer");
+  const browser = await puppeteer.default.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, {
+      waitUntil: "load",
+      timeout: Number(process.env.PDF_RENDER_TIMEOUT_MS || 15000),
+    });
+    await page.emulateMediaType("print");
+    await page.pdf({
+      path: absolutePath,
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "14mm",
+        bottom: "14mm",
+        left: "14mm",
+        right: "14mm",
+      },
+    });
+    await page.close();
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function writeSimplePdf(html: string, absolutePath: string) {
-  const text = html
-    .replace(/<style[\s\S]*?<\/style>/g, "")
-    .replace(/<[^>]+>/g, "\n")
-    .replace(/\n{2,}/g, "\n")
-    .trim()
-    .slice(0, 12000);
-  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-  const content = lines
-    .slice(0, 80)
-    .map((line, index) => `BT /F1 10 Tf 50 ${790 - index * 13} Td (${line.replace(/[()\\]/g, "")}) Tj ET`)
-    .join("\n");
-  const pdf = `%PDF-1.4
-1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
-2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
-3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj
-4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
-5 0 obj << /Length ${content.length} >> stream
-${content}
-endstream endobj
-xref
-0 6
-0000000000 65535 f 
-trailer << /Root 1 0 R /Size 6 >>
-startxref
-0
-%%EOF`;
-  await fs.writeFile(absolutePath, pdf);
+  return renderHtmlToPdf(html, absolutePath);
 }
 
 export function calculateAtsScore(jd: string, resumeHtml: string) {

@@ -2,18 +2,16 @@ import "server-only";
 import { cosineSimilarity } from "./embeddings";
 import { RepositoryRecord } from "./types";
 
+export const PINNED_BOOST = 0.08;
+
 export function selectRelevantRepos(repos: RepositoryRecord[], jdEmbedding: number[]) {
   const ranked = repos
-    .map((repo) => ({ repo, score: cosineSimilarity(repo.vectorEmbedding, jdEmbedding) }))
-    .sort((a, b) => b.score - a.score)
-    .map((item) => item.repo);
+    .map((repo) => {
+      const baseScore = cosineSimilarity(repo.vectorEmbedding, jdEmbedding);
+      const adjustedScore = repo.isPinned ? baseScore + PINNED_BOOST : baseScore;
+      return { repo, baseScore, adjustedScore };
+    })
+    .sort((a, b) => b.adjustedScore - a.adjustedScore);
 
-  const selected = ranked.slice(0, 4);
-  const pinned = ranked.filter((repo) => repo.isPinned);
-  for (const repo of pinned) {
-    if (selected.some((item) => item.id === repo.id)) continue;
-    if (selected.length < 4) selected.push(repo);
-    else selected[selected.length - 1] = repo;
-  }
-  return selected.slice(0, 4);
+  return ranked.slice(0, 4).map((item) => item.repo);
 }

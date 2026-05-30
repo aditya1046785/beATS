@@ -13,6 +13,16 @@ type GitHubRepo = {
   default_branch: string;
 };
 
+export class RateLimitError extends Error {
+  resetAt: number;
+
+  constructor(message: string, resetAt: number) {
+    super(message);
+    this.name = "RateLimitError";
+    this.resetAt = resetAt;
+  }
+}
+
 async function githubFetch<T>(token: string, url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -23,7 +33,14 @@ async function githubFetch<T>(token: string, url: string, init: RequestInit = {}
       ...(init.headers || {}),
     },
   });
-  if (!response.ok) throw new Error(`GitHub request failed: ${response.status}`);
+  if (!response.ok) {
+    const remaining = Number(response.headers.get("x-ratelimit-remaining") || "");
+    const resetAt = Number(response.headers.get("x-ratelimit-reset") || "0") * 1000;
+    if (response.status === 403 && remaining === 0 && resetAt) {
+      throw new RateLimitError("GitHub rate limit reached", resetAt);
+    }
+    throw new Error(`GitHub request failed: ${response.status}`);
+  }
   return response.json() as Promise<T>;
 }
 

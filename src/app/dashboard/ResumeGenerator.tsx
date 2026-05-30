@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
-export default function ResumeGenerator() {
+export default function ResumeGenerator({ initialJd = "" }: { initialJd?: string }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,6 +37,7 @@ export default function ResumeGenerator() {
         required
         rows={10}
         placeholder="Paste the Job Description here..."
+        defaultValue={initialJd}
         className="min-h-56 rounded border border-zinc-800 bg-black p-4 text-sm text-white outline-none focus:border-blue-500"
       />
       {error ? <p className="text-sm text-amber-300">{error}</p> : null}

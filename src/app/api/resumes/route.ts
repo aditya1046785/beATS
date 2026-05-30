@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDashboardUser } from "@/lib/auth";
-import { extractJobMeta, generateResumeContent } from "@/lib/ai";
+import { evaluateAtsScore, extractJobMeta, generateResumeContent } from "../../../lib/ai";
 import { embedText } from "@/lib/embeddings";
-import { calculateAtsScore, normalizeResumeContent, renderResumeHtml, writeSimplePdf } from "@/lib/resume";
+import { normalizeResumeContent, renderResumeHtml, renderHtmlToPdf } from "@/lib/resume";
 import { selectRelevantRepos } from "@/lib/selection";
 import { addResume, generatedPdfPath, getUserRepositories, saveUser } from "@/lib/store";
 import { ResumeRecord } from "@/lib/types";
@@ -19,8 +19,14 @@ function sanitizeResumeError(error: unknown) {
   if (message.includes("OPENROUTER_API_KEY")) {
     return "OpenRouter API key is missing. Add OPENROUTER_API_KEY in .env.local and restart the server.";
   }
-  if (message.includes("Sentence Transformers") || message.includes("sentence_transformers")) {
-    return "Local embedding model is not ready. Install sentence-transformers and try again.";
+  if (
+    message.includes("Sentence Transformers") ||
+    message.includes("sentence_transformers") ||
+    message.includes("all-MiniLM-L6-v2") ||
+    message.includes("huggingface.co") ||
+    message.includes("Connection reset")
+  ) {
+    return "Local embedding failed for all-MiniLM-L6-v2. sentence-transformers is installed, but model fetch/load from Hugging Face failed. Ensure stable access to huggingface.co, pre-download the model in ./venv, then retry.";
   }
   if (message.includes("AI returned malformed JSON") || message.includes("JSON")) {
     return "AI returned an invalid resume format. Please try again.";
@@ -56,37 +62,63 @@ export async function POST(request: NextRequest) {
     console.info("[resume] jd embedding created", { dimensions: jdEmbedding.length });
     const selected = selectRelevantRepos(repos, jdEmbedding);
     console.info("[resume] repos selected", selected.map((repo) => repo.githubRepoName));
-    const meta = await extractJobMeta(jd).catch((error) => {
+    const meta = await extractJobMeta(jd).catch((error: unknown) => {
       console.error("[resume] job metadata extraction failed; continuing", error);
-      return { jobTitle: "Target Role", companyName: "" };
+      return {
+        job_title: "Target Role",
+        company_name: "",
+        required_skills: [],
+        preferred_skills: [],
+        key_responsibilities: [],
+        keywords: [],
+        experience_level: "",
+        domain: "",
+      };
     });
     console.info("[resume] job metadata ready", meta);
-    const content = normalizeResumeContent(await generateResumeContent(user, jd, selected));
+    const content = normalizeResumeContent(await generateResumeContent(user, jd, selected, meta));
     console.info("[resume] content generated", { projects: content.projects.length });
     const html = renderResumeHtml(content);
-    const ats = calculateAtsScore(jd, html);
+    const ats = await evaluateAtsScore({
+      jdKeywords: meta.keywords,
+      jdRequiredSkills: meta.required_skills,
+      jdPreferredSkills: meta.preferred_skills,
+      resumeFullText: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+    }).catch((error: unknown) => {
+      console.error("[resume] ATS scoring failed; falling back", error);
+      return {
+        ats_score: 0,
+        matched_keywords: [],
+        missing_keywords: meta.keywords,
+        score_explanation: "ATS analysis failed, so a fallback score of 0 was used.",
+      };
+    });
     const id = crypto.randomUUID();
     const pdf = generatedPdfPath(`${id}.pdf`);
-    await writeSimplePdf(html, pdf.absolute);
+    await renderHtmlToPdf(html, pdf.absolute);
     const resume: ResumeRecord = {
       id,
       userId: user.id,
-      jobTitle: meta.jobTitle || "Target Role",
-      companyName: meta.companyName || "",
+      jobTitle: meta.job_title || "Target Role",
+      companyName: meta.company_name || "",
       jdText: jd,
+      jdEmbedding,
       selectedRepoIds: selected.map((repo) => repo.id),
       generatedResumeContent: content,
       generatedResumeHtml: html,
       pdfFilePath: pdf.publicUrl,
-      atsMatchScore: ats.score,
-      atsMatchedKeywords: ats.matched,
-      atsMissedKeywords: ats.missed,
+      atsMatchScore: ats.ats_score,
+      atsMatchedKeywords: ats.matched_keywords,
+      atsMissedKeywords: ats.missing_keywords,
+      atsDomainMismatch: ats.domain_mismatch,
+      atsMismatchReason: ats.mismatch_reason,
+      atsRecommendedRoles: ats.recommended_roles,
       generatedAt: new Date().toISOString(),
       templateUsed: "ats-single-column",
     };
     await addResume(resume);
     await saveUser({ ...user, monthTracker: nowMonth, resumesGeneratedThisMonth: usage + 1 });
-    console.info("[resume] completed", { resumeId: id, ats: ats.score });
+    console.info("[resume] completed", { resumeId: id, ats: ats.ats_score });
     return NextResponse.json({ id });
   } catch (error) {
     console.error("[resume] failed", error);
