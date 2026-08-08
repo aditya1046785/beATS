@@ -68,7 +68,96 @@ export function decryptToken(token: string) {
 
 // ---------- Row <-> App type mapping (Postgres uses snake_case, our types use camelCase) ----------
 
-function userRowToProfile(row: any): UserProfile {
+type UserRow = {
+  id: string;
+  github_id: string;
+  github_username: string;
+  github_access_token: string;
+  name: string;
+  email: string;
+  avatar_url: string;
+  phone: string | null;
+  city: string | null;
+  college_name: string | null;
+  degree: string | null;
+  graduation_year: string | null;
+  cgpa: string | null;
+  linkedin_url: string | null;
+  portfolio_url: string | null;
+  target_roles: string[] | null;
+  plan_type: UserProfile["planType"];
+  plan_expiry_date: string | null;
+  resumes_generated_this_month: number;
+  month_tracker: string;
+  onboarding_complete: boolean;
+  github_processed: boolean;
+  github_processing: boolean;
+  github_processing_stage: string | null;
+  github_processing_progress: number | null;
+  github_processing_error: string | null;
+  github_processing_current_repo: string | null;
+  github_processing_completed: number | null;
+  github_processing_total: number | null;
+  github_processing_repos: UserProfile["githubProcessingRepos"] | null;
+  last_github_sync_at: string | null;
+  created_at: string;
+};
+
+type RepositoryRow = {
+  id: string;
+  user_id: string;
+  github_repo_name: string;
+  github_repo_url: string;
+  short_description: string;
+  primary_language: string;
+  language_breakdown: Record<string, number> | null;
+  topics: string[] | null;
+  homepage_url: string;
+  is_pinned: boolean;
+  stars: number;
+  ai_summary: RepositoryRecord["aiSummary"];
+  vector_embedding: number[] | null;
+  github_updated_at: string;
+  last_synced_at: string;
+};
+
+type ResumeRow = {
+  id: string;
+  user_id: string;
+  job_title: string;
+  company_name: string;
+  jd_text: string;
+  jd_embedding: number[] | null;
+  selected_repo_ids: string[] | null;
+  generated_resume_content: ResumeRecord["generatedResumeContent"];
+  generated_resume_html: string;
+  pdf_file_path: string;
+  ats_match_score: number;
+  ats_matched_keywords: string[] | null;
+  ats_missed_keywords: string[] | null;
+  ats_domain_mismatch: boolean | null;
+  ats_mismatch_reason: string | null;
+  ats_recommended_roles: string[] | null;
+  generated_at: string;
+  template_used: string;
+};
+
+type PaymentRow = {
+  id: string;
+  user_id: string;
+  plan_type: PaymentRecord["planType"];
+  amount_paid: number;
+  payment_timestamp: string;
+  subscription_start_date: string;
+  subscription_end_date: string;
+  payment_status: string;
+  order_id: string | null;
+  payment_id: string | null;
+  signature: string | null;
+  currency: string | null;
+};
+
+function userRowToProfile(row: UserRow): UserProfile {
   return {
     id: row.id,
     githubId: row.github_id,
@@ -142,7 +231,7 @@ function userProfileToRow(user: UserProfile) {
   };
 }
 
-function repoRowToRecord(row: any): RepositoryRecord {
+function repoRowToRecord(row: RepositoryRow): RepositoryRecord {
   return {
     id: row.id,
     userId: row.user_id,
@@ -182,7 +271,7 @@ function repoRecordToRow(repo: RepositoryRecord) {
   };
 }
 
-function resumeRowToRecord(row: any): ResumeRecord {
+function resumeRowToRecord(row: ResumeRow): ResumeRecord {
   return {
     id: row.id,
     userId: row.user_id,
@@ -228,7 +317,7 @@ function resumeRecordToRow(resume: ResumeRecord) {
   };
 }
 
-function paymentRowToRecord(row: any): PaymentRecord {
+function paymentRowToRecord(row: PaymentRow): PaymentRecord {
   return {
     id: row.id,
     userId: row.user_id,
@@ -260,11 +349,6 @@ function paymentRecordToRow(payment: PaymentRecord) {
     signature: payment.signature ?? null,
     currency: payment.currency ?? null,
   };
-}
-
-function must<T>(value: T | null, message: string): T {
-  if (value === null || value === undefined) throw new Error(message);
-  return value;
 }
 
 // ---------- Public API (same function names/signatures as before) ----------
