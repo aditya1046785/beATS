@@ -25,6 +25,10 @@ export async function GET() {
     processing: user.githubProcessing,
     stage: user.githubProcessingStage || "Preparing...",
     progress: user.githubProcessingProgress || 0,
+    currentRepo: user.githubProcessingCurrentRepo || "",
+    completed: user.githubProcessingCompleted || 0,
+    total: user.githubProcessingTotal || 0,
+    repos: user.githubProcessingRepos || [],
     error: userFacingError(user.githubProcessingError || ""),
   });
 }

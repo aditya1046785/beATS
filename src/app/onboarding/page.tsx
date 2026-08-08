@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { FileText } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import OnboardingForm from "./OnboardingForm";
 
@@ -7,12 +8,16 @@ export default async function OnboardingPage() {
   if (user.onboardingComplete && !user.githubProcessed) redirect("/processing");
   if (user.onboardingComplete && user.githubProcessed) redirect("/dashboard");
   return (
-    <main className="min-h-screen bg-[#080808] px-6 py-10 text-white">
-      <div className="mx-auto mb-6 max-w-3xl">
-        <p className="text-blue-300">Welcome! Let&apos;s set up your profile.</p>
-        <h1 className="mt-2 text-3xl font-bold">Basic Details</h1>
+    <main className="min-h-screen overflow-hidden bg-[#0a0a0f] px-5 py-6 text-white">
+      <div className="pointer-events-none fixed inset-0 opacity-60">
+        <div className="absolute left-[-10%] top-[-10%] h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute bottom-[-15%] right-[-10%] h-[28rem] w-[28rem] rounded-full bg-emerald-500/5 blur-3xl" />
       </div>
-      <OnboardingForm name={user.name} />
+      <div className="relative mx-auto flex max-w-5xl items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500"><FileText size={17} /></span>PositionPerfect</div>
+        <span className="text-sm text-zinc-400">Step setup</span>
+      </div>
+      <OnboardingForm name={user.name} email={user.email} githubUsername={user.githubUsername} />
     </main>
   );
 }

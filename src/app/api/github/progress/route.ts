@@ -1,17 +1,17 @@
 import "server-only";
-import { NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getUser } from "@/lib/store";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const user = await requireUser();
+  let interval: ReturnType<typeof setInterval> | undefined;
 
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(new TextEncoder().encode(`retry: 2000\n\n`));
       let lastPayload = "";
 
-      const interval = setInterval(async () => {
+      interval = setInterval(async () => {
         try {
           const fresh = await getUser(user.id);
           if (!fresh) {
@@ -23,6 +23,10 @@ export async function GET(request: NextRequest) {
           const payload = JSON.stringify({
             stage: fresh.githubProcessingStage || "",
             progress: fresh.githubProcessingProgress || 0,
+            currentRepo: fresh.githubProcessingCurrentRepo || "",
+            completed: fresh.githubProcessingCompleted || 0,
+            total: fresh.githubProcessingTotal || 0,
+            repos: fresh.githubProcessingRepos || [],
             error: fresh.githubProcessingError || "",
             processing: Boolean(fresh.githubProcessing),
             processedAt: fresh.lastGithubSyncAt || null,
@@ -45,9 +49,9 @@ export async function GET(request: NextRequest) {
         }
       }, 500);
 
-      controller.oncancel = () => {
-        clearInterval(interval);
-      };
+    },
+    cancel() {
+      if (interval) clearInterval(interval);
     },
   });
 

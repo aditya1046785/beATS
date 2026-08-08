@@ -23,7 +23,7 @@ const plans = [
     oldPrice: "₹499",
     features: [
       "Everything in Starter",
-      "3 tailored resume versions",
+      "1 tailored resume per job description",
       "Full project rewriting",
       "Role-specific keyword injection",
       "PDF + DOCX download",

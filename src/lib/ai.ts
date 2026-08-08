@@ -1,7 +1,8 @@
 import "server-only";
 import { AtsAnalysis, JobAnalysis, RepoSummary, RepositoryRecord, ResumeContent, UserProfile } from "./types";
 
-const MODEL = "openrouter/free";
+const MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-5.6-luna";
+const OPENROUTER_TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS || 45000);
 
 async function callOpenRouter(system: string, user: string) {
   if (!process.env.OPENROUTER_API_KEY) {
@@ -15,18 +16,50 @@ async function callOpenRouter(system: string, user: string) {
     "X-Title": "PositionPerfect AI",
   };
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 3500,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+  const startedAt = Date.now();
+  const promptType =
+    system === atsScoreSystemPrompt
+      ? "ats"
+      : system.includes("Return valid JSON only")
+        ? "retry"
+        : system === resumeContentSystemPrompt
+          ? "resume"
+          : system === jobAnalysisSystemPrompt
+            ? "job-meta"
+            : system === repositorySummarySystemPrompt
+              ? "repo-summary"
+              : "unknown";
+
+  console.info("[openrouter] request started", {
+    model: MODEL,
+    promptType,
+    timeoutMs: OPENROUTER_TIMEOUT_MS,
+    systemLength: system.length,
+    userLength: user.length,
+  });
+
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 3500,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    }
+  );
+  console.info("[openrouter] request finished", {
+    model: MODEL,
+    promptType,
+    status: response.status,
+    durationMs: Date.now() - startedAt,
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");

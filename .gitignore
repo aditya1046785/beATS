@@ -47,6 +47,9 @@ yarn-error.log*
 dist/
 *.log
 
+# generated resume outputs
+/public/generated-resumes/
+
 # IDE
 .vscode/
 .idea/

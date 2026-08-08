@@ -5,9 +5,8 @@ import ProcessingClient from "./ProcessingClient";
 export default async function ProcessingPage() {
   const user = await requireUser();
   if (!user.onboardingComplete) redirect("/onboarding");
-  if (user.githubProcessed) redirect("/dashboard");
   return (
-    <main className="flex min-h-screen items-center bg-[#080808] px-6 py-10 text-white">
+    <main className="flex min-h-screen items-center bg-[#0a0a0f] px-6 py-10 text-white">
       <ProcessingClient />
     </main>
   );

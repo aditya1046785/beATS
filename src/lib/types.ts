@@ -27,6 +27,17 @@ export type UserProfile = {
   githubProcessingStage?: string;
   githubProcessingProgress?: number;
   githubProcessingError?: string;
+  githubProcessingCurrentRepo?: string;
+  githubProcessingCompleted?: number;
+  githubProcessingTotal?: number;
+  githubProcessingRepos?: Array<{
+    name: string;
+    description: string;
+    language: string;
+    stars: number;
+    pinned: boolean;
+    updatedAt: string;
+  }>;
   lastGithubSyncAt?: string;
   createdAt: string;
 };

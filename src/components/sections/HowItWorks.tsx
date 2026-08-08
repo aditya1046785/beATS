@@ -20,9 +20,9 @@ const steps = [
   {
     number: "3",
     subtitle: "STEP 03",
-    title: "Get 3 tailored versions",
-    body: "Receive three resume variations: one highlighting technical depth, one emphasizing impact and outcomes, one optimized purely for ATS keyword matching.",
-    why: "Different companies scan resumes differently. Three versions = three chances.",
+    title: "Get 1 tailored resume",
+    body: "Receive one resume tailored to that exact role, with your most relevant GitHub work rewritten in language aligned to the job description.",
+    why: "One JD in. One focused, role-specific resume out.",
   },
 ];
 

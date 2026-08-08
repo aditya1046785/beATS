@@ -5,7 +5,16 @@ import { saveUser } from "@/lib/store";
 
 export async function POST() {
   const user = await requireUser();
-  const updated = { ...user, githubProcessed: false, githubProcessing: true, githubProcessingProgress: 5 };
+  const updated = {
+    ...user,
+    githubProcessed: false,
+    githubProcessing: true,
+    githubProcessingProgress: 5,
+    githubProcessingCurrentRepo: "",
+    githubProcessingCompleted: 0,
+    githubProcessingTotal: 0,
+    githubProcessingRepos: [],
+  };
   await saveUser(updated);
   processGithubForUser(updated);
   return NextResponse.json({ ok: true });

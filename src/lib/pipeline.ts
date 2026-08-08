@@ -1,6 +1,6 @@
 import "server-only";
 import { embedText } from "./embeddings";
-import { RateLimitError, fetchAllRepos, fetchLanguages, fetchPinnedRepoNames, fetchRepoFile } from "./github";
+import { RateLimitError, fetchAllRepos, fetchLanguages, fetchPinnedRepoNames, fetchRepoFile, type GitHubRepo } from "./github";
 import { summarizeRepository } from "./ai";
 import { getUserRepositories, updateData, upsertUserRepositories } from "./store";
 import { RepositoryRecord, UserProfile } from "./types";
@@ -18,7 +18,13 @@ function summaryText(repo: RepositoryRecord) {
   ].join(". ");
 }
 
-async function setProgress(userId: string, stage: string, progress: number, error = "") {
+async function setProgress(
+  userId: string,
+  stage: string,
+  progress: number,
+  error = "",
+  extra: Partial<Pick<UserProfile, "githubProcessingCurrentRepo" | "githubProcessingCompleted" | "githubProcessingTotal" | "githubProcessingRepos">> = {},
+) {
   await updateData((data) => {
     const user = data.users.find((item) => item.id === userId);
     if (!user) return;
@@ -26,6 +32,10 @@ async function setProgress(userId: string, stage: string, progress: number, erro
     user.githubProcessingStage = stage;
     user.githubProcessingProgress = progress;
     user.githubProcessingError = error;
+    if (extra.githubProcessingCurrentRepo !== undefined) user.githubProcessingCurrentRepo = extra.githubProcessingCurrentRepo;
+    if (extra.githubProcessingCompleted !== undefined) user.githubProcessingCompleted = extra.githubProcessingCompleted;
+    if (extra.githubProcessingTotal !== undefined) user.githubProcessingTotal = extra.githubProcessingTotal;
+    if (extra.githubProcessingRepos !== undefined) user.githubProcessingRepos = extra.githubProcessingRepos;
   });
 }
 
@@ -50,6 +60,14 @@ export async function processGithubForUser(user: UserProfile) {
   const nextRepositories: RepositoryRecord[] = [];
   const existingRepositories = await getUserRepositories(user.id);
   const existingByName = new Map(existingRepositories.map((repo) => [repo.githubRepoName, repo]));
+  let repoSnapshot: Array<{
+    name: string;
+    description: string;
+    language: string;
+    stars: number;
+    pinned: boolean;
+    updatedAt: string;
+  }> = [];
 
   try {
     await setProgress(user.id, "Fetching your repositories...", 10);
@@ -58,9 +76,30 @@ export async function processGithubForUser(user: UserProfile) {
       fetchPinnedRepoNames(user.githubAccessToken, user.githubUsername),
     ]);
     const validRepos = repos.filter((repo) => !repo.fork && repo.name !== user.githubUsername);
+    repoSnapshot = validRepos.slice(0, 8).map((repo) => ({
+      name: repo.name,
+      description: repo.description || "",
+      language: repo.language || "",
+      stars: repo.stargazers_count,
+      pinned: pinnedNames.has(repo.name),
+      updatedAt: repo.updated_at,
+    }));
+
+    await setProgress(
+      user.id,
+      `Found ${validRepos.length} repositories on GitHub`,
+      20,
+      "",
+      {
+        githubProcessingCurrentRepo: repoSnapshot[0]?.name || "",
+        githubProcessingCompleted: 0,
+        githubProcessingTotal: validRepos.length,
+        githubProcessingRepos: repoSnapshot,
+      },
+    );
 
     // Prepare list of repos that require processing (new or updated)
-    const toProcess: { repo: any; existing?: RepositoryRecord }[] = [];
+    const toProcess: { repo: GitHubRepo; existing?: RepositoryRecord }[] = [];
     for (const repo of validRepos) {
       const existing = existingByName.get(repo.name);
       const isUnchanged = existing && existing.githubUpdatedAt === repo.updated_at;
@@ -81,7 +120,18 @@ export async function processGithubForUser(user: UserProfile) {
 
     for (let i = 0; i < toProcess.length; i += batchSize) {
       const batch = toProcess.slice(i, i + batchSize);
-      await setProgress(user.id, `Analyzing your projects with AI... (${completed} of ${total} complete)`, 45);
+      await setProgress(
+        user.id,
+        `Analyzing your projects with AI... (${completed} of ${total} complete)`,
+        45,
+        "",
+        {
+          githubProcessingCurrentRepo: batch[0]?.repo.name || repoSnapshot[0]?.name || "",
+          githubProcessingCompleted: completed,
+          githubProcessingTotal: total,
+          githubProcessingRepos: repoSnapshot,
+        },
+      );
 
       // Start fetching files for all repos in the batch in parallel
       const fileFetchPromises = batch.map(async ({ repo }) => {
@@ -128,7 +178,18 @@ export async function processGithubForUser(user: UserProfile) {
               lastSyncedAt: new Date().toISOString(),
             });
             completed += 1;
-            await setProgress(user.id, `Analyzing your projects... (${completed} of ${total} complete)`, 45 + Math.floor((completed / total) * 40));
+            await setProgress(
+              user.id,
+              `Analyzing your projects... (${completed} of ${total} complete)`,
+              45 + Math.floor((completed / total) * 40),
+              "",
+              {
+                githubProcessingCurrentRepo: repo.name,
+                githubProcessingCompleted: completed,
+                githubProcessingTotal: total,
+                githubProcessingRepos: repoSnapshot,
+              },
+            );
             return;
           }
 
@@ -171,14 +232,36 @@ export async function processGithubForUser(user: UserProfile) {
 
           nextRepositories.push(record);
           completed += 1;
-          await setProgress(user.id, `Analyzing your projects... (${completed} of ${total} complete)`, 45 + Math.floor((completed / total) * 40));
+          await setProgress(
+            user.id,
+            `Analyzing your projects... (${completed} of ${total} complete)`,
+            45 + Math.floor((completed / total) * 40),
+            "",
+            {
+              githubProcessingCurrentRepo: repo.name,
+              githubProcessingCompleted: completed,
+              githubProcessingTotal: total,
+              githubProcessingRepos: repoSnapshot,
+            },
+          );
         } catch (err) {
           // If it's a rate limit error, rethrow to be handled by outer catch
           if (err instanceof RateLimitError) throw err;
           console.error("Repository processing failed, skipping:", repo.name, err);
           // Continue without adding this repo
           completed += 1;
-          await setProgress(user.id, `Analyzing your projects... (${completed} of ${total} complete)`, 45 + Math.floor((completed / total) * 40));
+          await setProgress(
+            user.id,
+            `Analyzing your projects... (${completed} of ${total} complete)`,
+            45 + Math.floor((completed / total) * 40),
+            "",
+            {
+              githubProcessingCurrentRepo: repo.name,
+              githubProcessingCompleted: completed,
+              githubProcessingTotal: total,
+              githubProcessingRepos: repoSnapshot,
+            },
+          );
           return;
         }
       });
@@ -205,6 +288,10 @@ export async function processGithubForUser(user: UserProfile) {
       current.githubProcessing = false;
       current.githubProcessingStage = "Done! Taking you to your dashboard...";
       current.githubProcessingProgress = 100;
+      current.githubProcessingCurrentRepo = repoSnapshot[repoSnapshot.length - 1]?.name || repoSnapshot[0]?.name || "";
+      current.githubProcessingCompleted = total;
+      current.githubProcessingTotal = total;
+      current.githubProcessingRepos = repoSnapshot;
       current.lastGithubSyncAt = new Date().toISOString();
     });
   } catch (error) {
@@ -217,6 +304,10 @@ export async function processGithubForUser(user: UserProfile) {
         current.githubProcessing = true;
         current.githubProcessingStage = "GitHub rate limit reached. We'll resume shortly.";
         current.githubProcessingProgress = Math.max(current.githubProcessingProgress || 0, 40);
+        current.githubProcessingCurrentRepo = current.githubProcessingCurrentRepo || repoSnapshot[0]?.name || "";
+        current.githubProcessingCompleted = current.githubProcessingCompleted || 0;
+        current.githubProcessingTotal = current.githubProcessingTotal || repoSnapshot.length || 0;
+        current.githubProcessingRepos = current.githubProcessingRepos || repoSnapshot;
         current.githubProcessingError = userFacingError(error);
       });
       return;
@@ -228,6 +319,10 @@ export async function processGithubForUser(user: UserProfile) {
       if (!current) return;
       current.githubProcessing = false;
       current.githubProcessingProgress = Math.max(current.githubProcessingProgress || 0, 45);
+      current.githubProcessingCurrentRepo = current.githubProcessingCurrentRepo || repoSnapshot[0]?.name || "";
+      current.githubProcessingCompleted = current.githubProcessingCompleted || 0;
+      current.githubProcessingTotal = current.githubProcessingTotal || repoSnapshot.length || 0;
+      current.githubProcessingRepos = current.githubProcessingRepos || repoSnapshot;
       current.githubProcessingError = userFacingError(error);
     });
   }

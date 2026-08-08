@@ -3,25 +3,27 @@
 @tailwind utilities;
 
 :root {
-  --font-heading: var(--font-sora), sans-serif;
-  --font-body: var(--font-dm), sans-serif;
-  --bg-primary: #080808;
-  --bg-secondary: #0f0f0f;
-  --bg-card: #141414;
-  --bg-card-hover: #1a1a1a;
+  --font-heading: "Syne", "Sora", "Inter", system-ui, sans-serif;
+  --font-body: "DM Sans", "Inter", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #111118;
+  --bg-card: #111118;
+  --bg-card-hover: #1a1a24;
   --border-subtle: #1e1e1e;
   --border-medium: #2a2a2a;
-  --border-blue: rgba(59, 130, 246, 0.25);
-  --accent-blue: #3b82f6;
-  --accent-blue-glow: rgba(59, 130, 246, 0.15);
+  --border-blue: rgba(99, 102, 241, 0.25);
+  --accent-blue: #6366f1;
+  --accent-blue-glow: rgba(99, 102, 241, 0.15);
   --accent-green: #22c55e;
-  --accent-orange: #f97316;
-  --text-primary: #f0f0f0;
-  --text-secondary: #a0a0a0;
-  --text-muted: #555555;
-  --text-blue: #60a5fa;
-  --navbar-bg: rgba(8,8,8,0.85);
-  --hero-glow: rgba(59,130,246,0.04);
+  --accent-orange: #f59e0b;
+  --accent-danger: #ef4444;
+  --text-primary: #f4f4f5;
+  --text-secondary: #71717a;
+  --text-muted: #3f3f46;
+  --text-blue: #a5b4fc;
+  --navbar-bg: rgba(10,10,15,0.86);
+  --hero-glow: rgba(99,102,241,0.04);
 }
 
 /* Light mode overrides */
@@ -65,6 +67,28 @@ body {
   transition: background-color 300ms ease, color 300ms ease;
 }
 
+button,
+a,
+input,
+textarea,
+select {
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out, transform 150ms ease-out, opacity 150ms ease-out;
+}
+
+button:active,
+a:active {
+  transform: scale(0.97);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
 h1,
 h2,
 h3,
@@ -75,8 +99,8 @@ h6 {
 }
 
 ::selection {
-  background: rgba(59, 130, 246, 0.25);
-  color: #f0f0f0;
+  background: rgba(99, 102, 241, 0.25);
+  color: #f4f4f5;
 }
 
 ::-webkit-scrollbar {
@@ -84,7 +108,7 @@ h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: #080808;
+  background: #0a0a0f;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -99,15 +123,50 @@ h6 {
 .field {
   width: 100%;
   border: 1px solid #27272a;
-  border-radius: 6px;
-  background: #000;
-  color: #fff;
-  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0a0a0f;
+  color: #f4f4f5;
+  padding: 14px 16px;
   outline: none;
 }
 
 .field:focus {
-  border-color: #3b82f6;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+}
+
+.font-code {
+  font-family: var(--font-code);
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  animation: shimmer 1.5s infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  content: "";
+  inset: 0;
+  position: absolute;
+  transform: translateX(-100%);
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes softShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.soft-shake {
+  animation: softShake 180ms ease-in-out 2;
 }
 
 @keyframes pulseGlow {
@@ -120,4 +179,49 @@ h6 {
   100% {
     box-shadow: 0 0 0 rgba(59, 130, 246, 0);
   }
+}
+
+.legal-rich h3 {
+  margin: 1.5rem 0 0.65rem;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f4f4f5;
+}
+
+.legal-rich h3:first-child {
+  margin-top: 0;
+}
+
+.legal-rich p {
+  margin: 0.85rem 0 0;
+}
+
+.legal-rich p:first-child {
+  margin-top: 0;
+}
+
+.legal-rich ul {
+  margin: 0.9rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.legal-rich li {
+  margin: 0.45rem 0;
+  color: #d4d4df;
+}
+
+.legal-rich strong {
+  color: #f4f4f5;
+}
+
+.legal-rich code {
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  border-radius: 0.5rem;
+  background: rgba(139, 92, 246, 0.08);
+  padding: 0.15rem 0.4rem;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.92em;
+  color: #c4b5fd;
 }

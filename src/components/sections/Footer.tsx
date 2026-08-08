@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Github, Linkedin, Twitter } from "lucide-react";
 
 const productLinks = [
@@ -71,7 +72,15 @@ export default function Footer() {
 
         <div className="mt-8 flex flex-col justify-between gap-3 border-t border-[#111111] pt-6 text-[13px] text-[#333333] md:flex-row">
           <p>© 2025 PositionPerfect AI. All rights reserved.</p>
-          <p>Privacy Policy · Terms of Service</p>
+          <p>
+            <Link href="/privacy-policy" className="transition-colors duration-150 hover:text-[#F0F0F0]">
+              Privacy Policy
+            </Link>{" "}
+            ·{" "}
+            <Link href="/terms-of-service" className="transition-colors duration-150 hover:text-[#F0F0F0]">
+              Terms of Service
+            </Link>
+          </p>
         </div>
       </div>
     </footer>

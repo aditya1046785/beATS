@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const resumeStartedAt = Date.now();
     console.info("[resume] started", { userId: user.id, jdLength: jd.length, repos: repos.length });
     const jdEmbedding = await embedText(jd);
     console.info("[resume] jd embedding created", { dimensions: jdEmbedding.length });
@@ -79,6 +80,8 @@ export async function POST(request: NextRequest) {
     const content = normalizeResumeContent(await generateResumeContent(user, jd, selected, meta));
     console.info("[resume] content generated", { projects: content.projects.length });
     const html = renderResumeHtml(content);
+    const atsStartedAt = Date.now();
+    console.info("[resume] ats scoring started", { keywordCount: meta.keywords.length });
     const ats = await evaluateAtsScore({
       jdKeywords: meta.keywords,
       jdRequiredSkills: meta.required_skills,
@@ -91,11 +94,18 @@ export async function POST(request: NextRequest) {
         matched_keywords: [],
         missing_keywords: meta.keywords,
         score_explanation: "ATS analysis failed, so a fallback score of 0 was used.",
+        domain_mismatch: false,
+        mismatch_reason: null,
+        recommended_roles: [],
       };
     });
+    console.info("[resume] ats scoring completed", { ats: ats.ats_score, durationMs: Date.now() - atsStartedAt });
     const id = crypto.randomUUID();
     const pdf = generatedPdfPath(`${id}.pdf`);
+    const pdfStartedAt = Date.now();
+    console.info("[resume] pdf render started", { absolutePath: pdf.absolute });
     await renderHtmlToPdf(html, pdf.absolute);
+    console.info("[resume] pdf render completed", { durationMs: Date.now() - pdfStartedAt });
     const resume: ResumeRecord = {
       id,
       userId: user.id,
@@ -118,7 +128,7 @@ export async function POST(request: NextRequest) {
     };
     await addResume(resume);
     await saveUser({ ...user, monthTracker: nowMonth, resumesGeneratedThisMonth: usage + 1 });
-    console.info("[resume] completed", { resumeId: id, ats: ats.ats_score });
+    console.info("[resume] completed", { resumeId: id, ats: ats.ats_score, durationMs: Date.now() - resumeStartedAt });
     return NextResponse.json({ id });
   } catch (error) {
     console.error("[resume] failed", error);

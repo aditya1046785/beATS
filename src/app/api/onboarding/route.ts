@@ -23,6 +23,10 @@ export async function POST(request: NextRequest) {
     githubProcessing: true,
     githubProcessingStage: "We're analyzing your GitHub. This only happens once!",
     githubProcessingProgress: 5,
+    githubProcessingCurrentRepo: "",
+    githubProcessingCompleted: 0,
+    githubProcessingTotal: 0,
+    githubProcessingRepos: [],
   };
   await saveUser(updated);
   processGithubForUser(updated);

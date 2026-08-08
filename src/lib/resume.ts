@@ -132,7 +132,7 @@ function filterAndDeduplicateSkills(
   const cleanedLanguages = languages.filter((s) => !shouldSkipSkill(s)).map(normalizeSkillName);
   const cleanedFrameworks = frameworks.filter((s) => !shouldSkipSkill(s)).map(normalizeSkillName);
   let cleanedTools = tools.filter((s) => !shouldSkipSkill(s) && !isUiLibrary(s)).map(normalizeSkillName);
-  let cleanedDatabases = databases
+  const cleanedDatabases = databases
     .filter((s) => !shouldSkipSkill(s) && isValidDatabase(s))
     .map(normalizeSkillName);
 
