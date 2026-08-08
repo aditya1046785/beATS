@@ -1,60 +1,42 @@
 import "server-only";
-import { spawn } from "child_process";
-import { existsSync } from "fs";
 
-const PYTHON_CANDIDATES = ["./venv/bin/python", "python3"];
+const GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
+const OUTPUT_DIMENSIONALITY = 1536; // matches schema.sql — Gemini supports 3072, 1536, or 768
 
 export async function embedText(text: string): Promise<number[]> {
-  const script = `
-import json, sys
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer("all-MiniLM-L6-v2")
-payload = json.load(sys.stdin)
-embedding = model.encode(payload["text"], normalize_embeddings=True).tolist()
-print(json.dumps(embedding))
-`;
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set. Add it to your environment variables.");
+  }
 
-  const python = PYTHON_CANDIDATES.find((candidate) => {
-    if (candidate === "python3") return true;
-    try {
-      return existsSync(candidate);
-    } catch {
-      return false;
-    }
-  }) || "python3";
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: `models/${GEMINI_EMBEDDING_MODEL}`,
+        content: { parts: [{ text: text.slice(0, 6000) }] },
+        outputDimensionality: OUTPUT_DIMENSIONALITY,
+      }),
+    },
+  );
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(python, ["-c", script], { stdio: ["pipe", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => (stdout += chunk.toString()));
-    child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            [
-              `Local Sentence Transformers embedding failed with interpreter '${python}'.`,
-              "Required model: all-MiniLM-L6-v2.",
-              "If sentence-transformers is installed in venv, ensure ./venv/bin/python exists and server runs from project root.",
-              "If model download fails, verify network access to huggingface.co and retry.",
-              `stderr: ${stderr.slice(0, 1500)}`,
-            ].join(" "),
-          ),
-        );
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout) as number[]);
-      } catch (error) {
-        reject(new Error(`Local Sentence Transformers embedding output parse failed: ${String(error)}`));
-      }
-    });
-    child.on("error", (error) => {
-      reject(new Error(`Failed to start Python interpreter '${python}' for embeddings: ${String(error)}`));
-    });
-    child.stdin.end(JSON.stringify({ text: text.slice(0, 6000) }));
-  });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `Gemini embeddings request failed (${response.status}): ${errorBody.slice(0, 1500)}`,
+    );
+  }
+
+  const data = await response.json();
+  const embedding = data?.embedding?.values;
+
+  if (!Array.isArray(embedding)) {
+    throw new Error("Gemini embeddings response did not contain a valid embedding array.");
+  }
+
+  return embedding as number[];
 }
 
 export function cosineSimilarity(a: number[], b: number[]) {
@@ -66,6 +48,6 @@ export function cosineSimilarity(a: number[], b: number[]) {
     left += a[index] * a[index];
     right += b[index] * b[index];
   }
-  if (!left || !right) return 0;
+  if (!left || !right) return 0;  
   return dot / (Math.sqrt(left) * Math.sqrt(right));
 }
