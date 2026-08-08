@@ -1,19 +1,15 @@
 import "server-only";
-import { promises as fs } from "fs";
-import path from "path";
 import crypto from "crypto";
-import { AppData, RepositoryRecord, ResumeRecord, UserProfile } from "./types";
+import { supabaseAdmin } from "./supabaseAdmin";
+import {
+  AppData,
+  PaymentRecord,
+  RepositoryRecord,
+  ResumeRecord,
+  UserProfile,
+} from "./types";
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DATA_FILE = path.join(DATA_DIR, "app.json");
-const PDF_DIR = path.join(process.cwd(), "public", "generated-resumes");
-
-const emptyData: AppData = {
-  users: [],
-  repositories: [],
-  resumes: [],
-  payments: [],
-};
+// ---------- Token encryption (unchanged logic, still worth doing before it hits the DB) ----------
 
 let warnedAboutMissingEncryptionKey = false;
 
@@ -26,7 +22,6 @@ function getEncryptionKey() {
     }
     return null;
   }
-
   try {
     const decoded = Buffer.from(key, "base64");
     if (decoded.length !== 32) throw new Error("Invalid key length");
@@ -59,11 +54,7 @@ export function decryptToken(token: string) {
   if (!key || !token || !isEncryptedToken(token)) return token;
   try {
     const [ivText, payloadText, tagText] = token.split(":");
-    const decipher = crypto.createDecipheriv(
-      "aes-256-gcm",
-      key,
-      Buffer.from(ivText, "base64"),
-    );
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64"));
     decipher.setAuthTag(Buffer.from(tagText, "base64"));
     const decrypted = Buffer.concat([
       decipher.update(Buffer.from(payloadText, "base64")),
@@ -75,53 +66,256 @@ export function decryptToken(token: string) {
   }
 }
 
-function normalizeUser(user: UserProfile): UserProfile {
+// ---------- Row <-> App type mapping (Postgres uses snake_case, our types use camelCase) ----------
+
+function userRowToProfile(row: any): UserProfile {
   return {
-    ...user,
-    githubAccessToken: decryptToken(user.githubAccessToken),
+    id: row.id,
+    githubId: row.github_id,
+    githubUsername: row.github_username,
+    githubAccessToken: decryptToken(row.github_access_token),
+    name: row.name,
+    email: row.email,
+    avatarUrl: row.avatar_url,
+    phone: row.phone ?? undefined,
+    city: row.city ?? undefined,
+    collegeName: row.college_name ?? undefined,
+    degree: row.degree ?? undefined,
+    graduationYear: row.graduation_year ?? undefined,
+    cgpa: row.cgpa ?? undefined,
+    linkedinUrl: row.linkedin_url ?? undefined,
+    portfolioUrl: row.portfolio_url ?? undefined,
+    targetRoles: row.target_roles ?? undefined,
+    planType: row.plan_type,
+    planExpiryDate: row.plan_expiry_date ?? undefined,
+    resumesGeneratedThisMonth: row.resumes_generated_this_month,
+    monthTracker: row.month_tracker,
+    onboardingComplete: row.onboarding_complete,
+    githubProcessed: row.github_processed,
+    githubProcessing: row.github_processing,
+    githubProcessingStage: row.github_processing_stage ?? undefined,
+    githubProcessingProgress: row.github_processing_progress ?? undefined,
+    githubProcessingError: row.github_processing_error ?? undefined,
+    githubProcessingCurrentRepo: row.github_processing_current_repo ?? undefined,
+    githubProcessingCompleted: row.github_processing_completed ?? undefined,
+    githubProcessingTotal: row.github_processing_total ?? undefined,
+    githubProcessingRepos: row.github_processing_repos ?? undefined,
+    lastGithubSyncAt: row.last_github_sync_at ?? undefined,
+    createdAt: row.created_at,
   };
 }
 
-function persistUser(user: UserProfile): UserProfile {
+function userProfileToRow(user: UserProfile) {
   return {
-    ...user,
-    githubAccessToken: encryptToken(user.githubAccessToken),
+    id: user.id,
+    github_id: user.githubId,
+    github_username: user.githubUsername,
+    github_access_token: encryptToken(user.githubAccessToken),
+    name: user.name,
+    email: user.email,
+    avatar_url: user.avatarUrl,
+    phone: user.phone ?? null,
+    city: user.city ?? null,
+    college_name: user.collegeName ?? null,
+    degree: user.degree ?? null,
+    graduation_year: user.graduationYear ?? null,
+    cgpa: user.cgpa ?? null,
+    linkedin_url: user.linkedinUrl ?? null,
+    portfolio_url: user.portfolioUrl ?? null,
+    target_roles: user.targetRoles ?? null,
+    plan_type: user.planType,
+    plan_expiry_date: user.planExpiryDate ?? null,
+    resumes_generated_this_month: user.resumesGeneratedThisMonth,
+    month_tracker: user.monthTracker,
+    onboarding_complete: user.onboardingComplete,
+    github_processed: user.githubProcessed,
+    github_processing: user.githubProcessing,
+    github_processing_stage: user.githubProcessingStage ?? null,
+    github_processing_progress: user.githubProcessingProgress ?? null,
+    github_processing_error: user.githubProcessingError ?? null,
+    github_processing_current_repo: user.githubProcessingCurrentRepo ?? null,
+    github_processing_completed: user.githubProcessingCompleted ?? null,
+    github_processing_total: user.githubProcessingTotal ?? null,
+    github_processing_repos: user.githubProcessingRepos ?? null,
+    last_github_sync_at: user.lastGithubSyncAt ?? null,
+    created_at: user.createdAt,
   };
 }
 
+function repoRowToRecord(row: any): RepositoryRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    githubRepoName: row.github_repo_name,
+    githubRepoUrl: row.github_repo_url,
+    shortDescription: row.short_description,
+    primaryLanguage: row.primary_language,
+    languageBreakdown: row.language_breakdown ?? {},
+    topics: row.topics ?? [],
+    homepageUrl: row.homepage_url,
+    isPinned: row.is_pinned,
+    stars: row.stars,
+    aiSummary: row.ai_summary,
+    vectorEmbedding: row.vector_embedding ?? [],
+    githubUpdatedAt: row.github_updated_at,
+    lastSyncedAt: row.last_synced_at,
+  };
+}
+
+function repoRecordToRow(repo: RepositoryRecord) {
+  return {
+    id: repo.id,
+    user_id: repo.userId,
+    github_repo_name: repo.githubRepoName,
+    github_repo_url: repo.githubRepoUrl,
+    short_description: repo.shortDescription,
+    primary_language: repo.primaryLanguage,
+    language_breakdown: repo.languageBreakdown,
+    topics: repo.topics,
+    homepage_url: repo.homepageUrl,
+    is_pinned: repo.isPinned,
+    stars: repo.stars,
+    ai_summary: repo.aiSummary,
+    vector_embedding: repo.vectorEmbedding,
+    github_updated_at: repo.githubUpdatedAt,
+    last_synced_at: repo.lastSyncedAt,
+  };
+}
+
+function resumeRowToRecord(row: any): ResumeRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    jobTitle: row.job_title,
+    companyName: row.company_name,
+    jdText: row.jd_text,
+    jdEmbedding: row.jd_embedding ?? undefined,
+    selectedRepoIds: row.selected_repo_ids ?? [],
+    generatedResumeContent: row.generated_resume_content,
+    generatedResumeHtml: row.generated_resume_html,
+    pdfFilePath: row.pdf_file_path,
+    atsMatchScore: row.ats_match_score,
+    atsMatchedKeywords: row.ats_matched_keywords ?? [],
+    atsMissedKeywords: row.ats_missed_keywords ?? [],
+    atsDomainMismatch: row.ats_domain_mismatch ?? undefined,
+    atsMismatchReason: row.ats_mismatch_reason ?? undefined,
+    atsRecommendedRoles: row.ats_recommended_roles ?? undefined,
+    generatedAt: row.generated_at,
+    templateUsed: row.template_used,
+  };
+}
+
+function resumeRecordToRow(resume: ResumeRecord) {
+  return {
+    id: resume.id,
+    user_id: resume.userId,
+    job_title: resume.jobTitle,
+    company_name: resume.companyName,
+    jd_text: resume.jdText,
+    jd_embedding: resume.jdEmbedding ?? null,
+    selected_repo_ids: resume.selectedRepoIds,
+    generated_resume_content: resume.generatedResumeContent,
+    generated_resume_html: resume.generatedResumeHtml,
+    pdf_file_path: resume.pdfFilePath,
+    ats_match_score: resume.atsMatchScore,
+    ats_matched_keywords: resume.atsMatchedKeywords,
+    ats_missed_keywords: resume.atsMissedKeywords,
+    ats_domain_mismatch: resume.atsDomainMismatch ?? null,
+    ats_mismatch_reason: resume.atsMismatchReason ?? null,
+    ats_recommended_roles: resume.atsRecommendedRoles ?? null,
+    generated_at: resume.generatedAt,
+    template_used: resume.templateUsed,
+  };
+}
+
+function paymentRowToRecord(row: any): PaymentRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    planType: row.plan_type,
+    amountPaid: row.amount_paid,
+    paymentTimestamp: row.payment_timestamp,
+    subscriptionStartDate: row.subscription_start_date,
+    subscriptionEndDate: row.subscription_end_date,
+    paymentStatus: row.payment_status,
+    orderId: row.order_id ?? undefined,
+    paymentId: row.payment_id ?? undefined,
+    signature: row.signature ?? undefined,
+    currency: row.currency ?? undefined,
+  };
+}
+
+function paymentRecordToRow(payment: PaymentRecord) {
+  return {
+    id: payment.id,
+    user_id: payment.userId,
+    plan_type: payment.planType,
+    amount_paid: payment.amountPaid,
+    payment_timestamp: payment.paymentTimestamp,
+    subscription_start_date: payment.subscriptionStartDate,
+    subscription_end_date: payment.subscriptionEndDate,
+    payment_status: payment.paymentStatus,
+    order_id: payment.orderId ?? null,
+    payment_id: payment.paymentId ?? null,
+    signature: payment.signature ?? null,
+    currency: payment.currency ?? null,
+  };
+}
+
+function must<T>(value: T | null, message: string): T {
+  if (value === null || value === undefined) throw new Error(message);
+  return value;
+}
+
+// ---------- Public API (same function names/signatures as before) ----------
+
+// No-op now — tables are created once via schema.sql, not at request time.
 export async function ensureStorage() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.mkdir(PDF_DIR, { recursive: true });
-  try {
-    await fs.access(DATA_FILE);
-  } catch {
-    await fs.writeFile(DATA_FILE, JSON.stringify(emptyData, null, 2));
-  }
+  return;
 }
 
 export async function readData(): Promise<AppData> {
-  await ensureStorage();
-  const raw = await fs.readFile(DATA_FILE, "utf8");
-  const data = JSON.parse(raw) as AppData;
+  const [{ data: users, error: usersErr }, { data: repos, error: reposErr }, { data: resumes, error: resumesErr }, { data: payments, error: paymentsErr }] =
+    await Promise.all([
+      supabaseAdmin.from("users").select("*"),
+      supabaseAdmin.from("repositories").select("*"),
+      supabaseAdmin.from("resumes").select("*"),
+      supabaseAdmin.from("payments").select("*"),
+    ]);
+
+  if (usersErr) throw usersErr;
+  if (reposErr) throw reposErr;
+  if (resumesErr) throw resumesErr;
+  if (paymentsErr) throw paymentsErr;
+
   return {
-    ...data,
-    users: data.users.map(normalizeUser),
+    users: (users ?? []).map(userRowToProfile),
+    repositories: (repos ?? []).map(repoRowToRecord),
+    resumes: (resumes ?? []).map(resumeRowToRecord),
+    payments: (payments ?? []).map(paymentRowToRecord),
   };
 }
 
+// Bulk overwrite — kept for compatibility with any code using updateData().
+// For most cases, prefer the targeted functions below (saveUser, addResume, etc.)
+// since they avoid re-reading/re-writing the entire dataset.
 export async function writeData(data: AppData) {
-  await ensureStorage();
-  await fs.writeFile(
-    DATA_FILE,
-    JSON.stringify(
-      {
-        ...data,
-        users: data.users.map(persistUser),
-      },
-      null,
-      2,
-    ),
-  );
+  if (data.users.length) {
+    const { error } = await supabaseAdmin.from("users").upsert(data.users.map(userProfileToRow));
+    if (error) throw error;
+  }
+  if (data.repositories.length) {
+    const { error } = await supabaseAdmin.from("repositories").upsert(data.repositories.map(repoRecordToRow));
+    if (error) throw error;
+  }
+  if (data.resumes.length) {
+    const { error } = await supabaseAdmin.from("resumes").upsert(data.resumes.map(resumeRecordToRow));
+    if (error) throw error;
+  }
+  if (data.payments.length) {
+    const { error } = await supabaseAdmin.from("payments").upsert(data.payments.map(paymentRecordToRow));
+    if (error) throw error;
+  }
 }
 
 export async function updateData(mutator: (data: AppData) => void | Promise<void>) {
@@ -132,75 +326,92 @@ export async function updateData(mutator: (data: AppData) => void | Promise<void
 }
 
 export async function getUser(id: string) {
-  const data = await readData();
-  return data.users.find((user) => user.id === id);
+  const { data, error } = await supabaseAdmin.from("users").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? userRowToProfile(data) : undefined;
 }
 
 export async function saveUser(user: UserProfile) {
-  await updateData((data) => {
-    const index = data.users.findIndex((item) => item.id === user.id);
-    const next = normalizeUser(user);
-    if (index >= 0) data.users[index] = next;
-    else data.users.push(next);
-  });
+  const { error } = await supabaseAdmin.from("users").upsert(userProfileToRow(user));
+  if (error) throw error;
 }
 
 export async function replaceUserRepositories(userId: string, repositories: RepositoryRecord[]) {
-  await updateData((data) => {
-    data.repositories = data.repositories.filter((repo) => repo.userId !== userId);
-    data.repositories.push(...repositories);
-  });
+  const { error: deleteError } = await supabaseAdmin.from("repositories").delete().eq("user_id", userId);
+  if (deleteError) throw deleteError;
+
+  if (repositories.length) {
+    const { error: insertError } = await supabaseAdmin
+      .from("repositories")
+      .insert(repositories.map(repoRecordToRow));
+    if (insertError) throw insertError;
+  }
 }
 
 export async function upsertUserRepositories(userId: string, repositories: RepositoryRecord[]) {
-  await updateData((data) => {
-    const existing = data.repositories.filter((repo) => repo.userId === userId);
-    const merged = new Map(existing.map((repo) => [repo.githubRepoName, repo]));
-    for (const repository of repositories) {
-      merged.set(repository.githubRepoName, repository);
-    }
-    data.repositories = data.repositories.filter((repo) => repo.userId !== userId);
-    data.repositories.push(...merged.values());
-  });
+  if (!repositories.length) return;
+  // Relies on the unique(user_id, github_repo_name) constraint from schema.sql
+  // to merge on conflict instead of creating duplicates.
+  const { error } = await supabaseAdmin
+    .from("repositories")
+    .upsert(repositories.map(repoRecordToRow), { onConflict: "user_id,github_repo_name" });
+  if (error) throw error;
 }
 
 export async function getUserRepositories(userId: string) {
-  const data = await readData();
-  return data.repositories.filter((repo) => repo.userId === userId);
+  const { data, error } = await supabaseAdmin.from("repositories").select("*").eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []).map(repoRowToRecord);
 }
 
 export async function addResume(resume: ResumeRecord) {
-  await updateData((data) => {
-    data.resumes.push(resume);
-  });
+  const { error } = await supabaseAdmin.from("resumes").insert(resumeRecordToRow(resume));
+  if (error) throw error;
 }
 
-export async function addPaymentRecord(payment: import("./types").PaymentRecord) {
-  await updateData((data) => {
-    data.payments.push(payment);
-  });
+export async function addPaymentRecord(payment: PaymentRecord) {
+  const { error } = await supabaseAdmin.from("payments").insert(paymentRecordToRow(payment));
+  if (error) throw error;
 }
 
 export async function getUserPayments(userId: string) {
-  const data = await readData();
-  return data.payments.filter((payment) => payment.userId === userId).sort((a, b) => b.paymentTimestamp.localeCompare(a.paymentTimestamp));
+  const { data, error } = await supabaseAdmin
+    .from("payments")
+    .select("*")
+    .eq("user_id", userId)
+    .order("payment_timestamp", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(paymentRowToRecord);
 }
 
 export async function getUserResumes(userId: string) {
-  const data = await readData();
-  return data.resumes
-    .filter((resume) => resume.userId === userId)
-    .sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
+  const { data, error } = await supabaseAdmin
+    .from("resumes")
+    .select("*")
+    .eq("user_id", userId)
+    .order("generated_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(resumeRowToRecord);
 }
 
 export async function getResumeForUser(userId: string, resumeId: string) {
-  const data = await readData();
-  return data.resumes.find((resume) => resume.id === resumeId && resume.userId === userId);
+  const { data, error } = await supabaseAdmin
+    .from("resumes")
+    .select("*")
+    .eq("id", resumeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? resumeRowToRecord(data) : undefined;
 }
 
+// NOTE: PDF storage still needs to move off the local filesystem (Vercel is read-only
+// outside /tmp). This function currently only builds a path string — the actual file
+// write happens wherever your PDF-generation code calls fs.writeFile with this path.
+// Share that code and we'll switch it to Supabase Storage (or Vercel Blob) next.
 export function generatedPdfPath(fileName: string) {
   return {
-    absolute: path.join(PDF_DIR, fileName),
-    publicUrl: `/generated-resumes/${fileName}`,
+    absolute: `/tmp/${fileName}`, // temporary — not persistent, just avoids the immediate crash
+    publicUrl: `/generated-resumes/${fileName}`, // will need to become a real Storage URL
   };
 }

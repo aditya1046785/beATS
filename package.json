@@ -9,12 +9,13 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
     "autoprefixer": "^10.4.20",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.460.0",
     "next": "^14.2.33",
-    "puppeteer": "^24.12.1",
     "postcss": "^8.4.49",
+    "puppeteer": "^24.12.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
