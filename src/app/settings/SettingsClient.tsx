@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { AlertTriangle, Bell, CreditCard, Github, RotateCw, Shield, User } from "lucide-react";
 import { PaymentRecord, UserProfile } from "@/lib/types";
+import { formatDate } from "@/lib/formatDate";
 
 type RazorpayResponse = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
 type RazorpayOptions = { key: string; amount: number; currency: string; name: string; description: string; order_id: string; handler: (response: RazorpayResponse) => Promise<void>; modal?: { ondismiss?: () => void } };
@@ -138,7 +139,7 @@ export default function SettingsClient({ user }: { user: UserProfile }) {
         <section id="integrations" className="rounded-lg border border-zinc-800 bg-[#111118] p-5">
           <h2 className="text-xl font-semibold">Integrations</h2><p className="mt-1 text-sm text-zinc-500">Connected services that power your resume generation.</p>
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
-            <div className="flex items-center gap-3"><Github /><div><p className="font-semibold">GitHub</p><p className="text-sm text-zinc-500">Connected as @{user.githubUsername}</p><p className="text-sm text-zinc-500">Last synced: {user.lastGithubSyncAt ? new Date(user.lastGithubSyncAt).toLocaleDateString() : "Not yet"}</p></div></div>
+            <div className="flex items-center gap-3"><Github /><div><p className="font-semibold">GitHub</p><p className="text-sm text-zinc-500">Connected as @{user.githubUsername}</p><p className="text-sm text-zinc-500">Last synced: {user.lastGithubSyncAt ? formatDate(user.lastGithubSyncAt) : "Not yet"}</p></div></div>
             <div className="flex gap-2"><button onClick={resync} disabled={syncing} className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"><RotateCw className={syncing ? "animate-spin" : ""} size={15} />{syncing ? "Syncing..." : "Sync Now"}</button><button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm">Disconnect</button></div>
           </div>
         </section>
@@ -151,7 +152,7 @@ export default function SettingsClient({ user }: { user: UserProfile }) {
               <div className="grid gap-4 sm:grid-cols-2"><button disabled={paying !== null} onClick={() => startCheckout("annual")} className="rounded-lg border border-indigo-500/50 p-5 text-left hover:bg-indigo-500/10"><span className="font-semibold">ANNUAL</span><br /><span className="text-2xl font-bold">₹799 / year</span><br /><span className="text-sm text-zinc-400">₹66 per month • Save 33%</span><span className="mt-5 block rounded bg-indigo-500 px-3 py-2 text-center text-sm font-semibold text-white">Get Pro Annual</span></button><button disabled={paying !== null} onClick={() => startCheckout("monthly")} className="rounded-lg border border-zinc-700 p-5 text-left hover:bg-white/5"><span className="font-semibold">MONTHLY</span><br /><span className="text-2xl font-bold">₹99 / month</span><span className="mt-5 block rounded bg-zinc-800 px-3 py-2 text-center text-sm font-semibold">Get Pro Monthly</span></button></div>
             </div>
           ) : (
-            <div className="mt-5 grid gap-4"><div className="rounded-lg border border-emerald-500/30 p-4"><p className="font-semibold text-emerald-300">PRO PLAN ✓</p><p className="text-zinc-400">Renews on {user.planExpiryDate ? new Date(user.planExpiryDate).toLocaleDateString() : "your next billing date"}</p><p className="mt-3 text-sm text-zinc-300">• Unlimited resumes<br />• Full ATS breakdown<br />• Priority processing</p></div>{history.map((payment) => <p key={payment.id} className="rounded border border-zinc-800 p-3 text-sm">{new Date(payment.paymentTimestamp).toLocaleDateString()} · ₹{payment.amountPaid} · {payment.paymentStatus}</p>)}</div>
+            <div className="mt-5 grid gap-4"><div className="rounded-lg border border-emerald-500/30 p-4"><p className="font-semibold text-emerald-300">PRO PLAN ✓</p><p className="text-zinc-400">Renews on {user.planExpiryDate ? formatDate(user.planExpiryDate) : "your next billing date"}</p><p className="mt-3 text-sm text-zinc-300">• Unlimited resumes<br />• Full ATS breakdown<br />• Priority processing</p></div>{history.map((payment) => <p key={payment.id} className="rounded border border-zinc-800 p-3 text-sm">{formatDate(payment.paymentTimestamp)} · ₹{payment.amountPaid} · {payment.paymentStatus}</p>)}</div>
           )}
           {paymentMessage ? <p className="mt-3 text-sm text-zinc-300">{paymentMessage}</p> : null}
         </section>

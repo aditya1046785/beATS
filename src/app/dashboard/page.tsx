@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Bell, Download, FileText, Github, LayoutDashboard, RotateCw, Search, Settings, UserCircle } from "lucide-react";
 import { requireDashboardUser } from "@/lib/auth";
 import { getUserRepositories, getUserResumes } from "@/lib/store";
+import { formatDate } from "@/lib/formatDate";
 import ResumeGenerator from "./ResumeGenerator";
 
 function scoreColor(score: number) {
@@ -104,7 +105,7 @@ export default async function DashboardPage() {
                       <h3 className="mt-5 font-semibold">{resume.jobTitle}</h3>
                       <p className="text-sm text-zinc-500">{resume.companyName || "Target company"}</p>
                       <p className={`font-code mt-4 text-sm ${scoreColor(resume.atsMatchScore || 0)}`}>ATS Score: {resume.atsMatchScore || 0}% <span>{"●".repeat(dots)}{"○".repeat(5 - dots)}</span></p>
-                      <p className="mt-3 text-xs text-zinc-500">Generated {new Date(resume.generatedAt).toLocaleDateString()}</p>
+                      <p className="mt-3 text-xs text-zinc-500">Generated {formatDate(resume.generatedAt)}</p>
                       <div className="mt-5 flex gap-2">
                         <span className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200"><Download size={14} />Download</span>
                         <span className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">View</span>

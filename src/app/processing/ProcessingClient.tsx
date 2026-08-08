@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Check, Circle, RotateCw } from "lucide-react";
+import { formatDate } from "@/lib/formatDate";
 
 type ProcessingRepo = {
   name: string;
@@ -160,7 +161,7 @@ export default function ProcessingClient() {
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-400">
                 {repo.language ? <span className="rounded-full border border-zinc-700 px-2 py-1">{repo.language}</span> : null}
                 <span className="rounded-full border border-zinc-700 px-2 py-1">{repo.stars} stars</span>
-                <span className="rounded-full border border-zinc-700 px-2 py-1">Updated {new Date(repo.updatedAt).toLocaleDateString()}</span>
+                <span className="rounded-full border border-zinc-700 px-2 py-1">Updated {formatDate(repo.updatedAt)}</span>
               </div>
             </div>
           ))}

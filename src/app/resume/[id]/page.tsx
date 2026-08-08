@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ArrowLeft, Copy, Download, Lock, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { requireDashboardUser } from "@/lib/auth";
 import { getResumeForUser, getUserRepositories } from "@/lib/store";
+import { formatDate } from "@/lib/formatDate";
 import ResumeGenerator from "@/app/dashboard/ResumeGenerator";
 
 function formatKeywords(items: string[], max = 8) {
@@ -74,7 +75,7 @@ export default async function ResumePage({ params }: { params: { id: string } })
 
             <section className="grid gap-3 rounded-lg border border-zinc-800 bg-[#111118] p-5 text-sm">
               <h2 className="font-semibold text-base">Resume Metadata</h2>
-              <p className="flex justify-between gap-3"><span className="text-zinc-500">Generated on</span><span>{new Date(resume.generatedAt).toLocaleDateString()}</span></p>
+              <p className="flex justify-between gap-3"><span className="text-zinc-500">Generated on</span><span>{formatDate(resume.generatedAt)}</span></p>
               <p className="flex justify-between gap-3"><span className="text-zinc-500">Job Title</span><span className="text-right">{resume.jobTitle}</span></p>
               <p className="flex justify-between gap-3"><span className="text-zinc-500">Company</span><span>{resume.companyName || "Unknown"}</span></p>
               <p className="grid gap-1"><span className="text-zinc-500">Projects used</span><span>{selectedRepoNames.join(", ") || "Selected GitHub projects"}</span></p>
