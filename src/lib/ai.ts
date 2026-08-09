@@ -33,7 +33,11 @@ function getEnvValue(key: string) {
 const MODEL = getEnvValue("OPENROUTER_MODEL") || "openai/gpt-5.6-luna";
 const OPENROUTER_TIMEOUT_MS = Number(getEnvValue("OPENROUTER_TIMEOUT_MS") || 45000);
 
-async function callOpenRouter(system: string, user: string) {
+// Output-token caps per prompt type. The resume is the largest output; the rest are small JSON blobs.
+// These cap worst-case generation cost without risking truncation (actual outputs are far below).
+const MAX_TOKENS = { repo: 1200, job: 1000, resume: 3500, ats: 800 };
+
+async function callOpenRouter(system: string, user: string, maxTokens = MAX_TOKENS.resume) {
   const apiKey = getEnvValue("OPENROUTER_API_KEY");
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is required");
@@ -80,7 +84,7 @@ async function callOpenRouter(system: string, user: string) {
         signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 3500,
+          max_tokens: maxTokens,
           temperature: 0.2,
           messages: [
             { role: "system", content: system },
@@ -341,15 +345,15 @@ function validateResumeContent(value: unknown): ResumeContent {
   };
 }
 
-async function callJson<T>(system: string, user: string, validate: (value: unknown) => T, debugLabel?: string) {
-  const first = await callOpenRouter(system, user);
+async function callJson<T>(system: string, user: string, validate: (value: unknown) => T, debugLabel?: string, maxTokens = MAX_TOKENS.resume) {
+  const first = await callOpenRouter(system, user, maxTokens);
   if (debugLabel) {
     console.info(`[${debugLabel}] raw AI response`, first);
   }
   try {
     return validate(parseJson<T>(first));
   } catch {
-    const second = await callOpenRouter(`${system} Return valid JSON only. No markdown, no commentary, no extra text.`, user);
+    const second = await callOpenRouter(`${system} Return valid JSON only. No markdown, no commentary, no extra text.`, user, maxTokens);
     if (debugLabel) {
       console.info(`[${debugLabel}] raw AI response retry`, second);
     }
@@ -361,107 +365,99 @@ async function callJson<T>(system: string, user: string, validate: (value: unkno
   }
 }
 
-const repositorySummarySystemPrompt = `You are a technical resume writer analyzing a GitHub repository to extract resume-worthy information.
+const repositorySummarySystemPrompt = `You are a technical resume writer extracting resume-worthy information from a GitHub repository.
 
 Return ONLY a valid JSON object. No explanation. No markdown. No code fences.
-Exactly this structure:
 
 {
   "one_liner": "One sentence describing what this project does in plain English.",
   "tech_skills": {
-    "languages": ["list", "of", "programming", "languages", "used"],
-    "frameworks": ["list", "of", "frameworks", "and", "libraries"],
-    "tools": ["list", "of", "tools", "databases", "platforms", "APIs", "used"],
-    "concepts": ["list", "of", "technical", "concepts", "demonstrated"]
+    "languages": ["programming languages actually used"],
+    "frameworks": ["frameworks and libraries actually used"],
+    "tools": ["tools, databases, platforms, APIs used"],
+    "concepts": ["technical concepts demonstrated"]
   },
-  "what_it_does": "2-3 sentences explaining the problem this project solves and how.",
+  "what_it_does": "2-3 sentences: the problem this project solves and how.",
   "notable_implementations": [
-    "Specific technical thing implemented, e.g. JWT-based authentication system",
-    "Another specific thing, e.g. RESTful API with 10+ endpoints",
-    "Another specific thing, e.g. real-time updates using WebSockets"
+    "Specific technical thing, e.g. JWT-based authentication system",
+    "Another specific thing, e.g. RESTful API with 10+ endpoints"
   ],
-  "impact_or_scale": "Any measurable detail if available — users, performance, scale, uptime. Write null if nothing available.",
-  "relevant_roles": ["SDE", "Backend Developer", "etc — roles this project is relevant for"]
+  "impact_or_scale": "Measurable detail if present (users, performance, scale, uptime); else null.",
+  "relevant_roles": ["SDE", "Backend Developer", "roles this project is relevant for"]
 }
 
 Rules:
-- Only include skills that are actually visible in the repository data provided.
-- Do not invent or assume any technology not present in the data.
-- SKIP minor/utility packages: CSS utilities (clsx, class-variance-authority, cva), date libraries (date-fns, moment, dayjs), icon packs (Lucide React, React Icons), carousels (Embla Carousel, Swiper), dotenv, and sub-dependencies of already-listed frameworks.
-- Databases must be actual databases or ORMs: PostgreSQL, MongoDB, MySQL, Firebase, Redis, Prisma, Supabase, DynamoDB, etc. Do not list UI libraries, styling, or utility packages as tools.
-- Tools should contain only developer tools, platforms, and services — never UI libraries.
-- If a skill is already listed as a Framework, do not duplicate it in Tools.
-- notable_implementations must be specific — never generic like "used good coding practices".
-- If README is empty or missing, use language and dependency data only.
-- If there is truly not enough data, return the JSON with whatever is available and null for missing fields.`;
+- Only include technologies actually visible in the provided repository data. Never invent.
+- Use exact technology names as they appear (e.g. "Node.js", not "nodejs").
+- SKIP minor/utility packages: CSS utilities (clsx, class-variance-authority, cva), date libs (date-fns, moment, dayjs), icon packs (Lucide, React Icons), carousels (Embla, Swiper), dotenv, and sub-packages of listed frameworks.
+- Databases = real databases/ORMs only (PostgreSQL, MongoDB, MySQL, Firebase, Redis, Prisma, Supabase, DynamoDB). Never list UI/styling libs as tools.
+- Tools = developer tools, platforms, services only. Never UI libraries.
+- If a skill is listed as a framework, do not duplicate it under tools.
+- notable_implementations must be specific — never generic ("used good coding practices").
+- Ignore boilerplate README sections (badges, license, install/setup, contribution guides).
+- If README is missing/empty, rely on language and dependency data.
+- If data is insufficient, return available fields and null for missing ones.`;
 
 const jobAnalysisSystemPrompt = `You are a job description analyst.
 
-Given the following job description, extract key information and return ONLY a valid JSON object. No explanation. No markdown. No code fences.
-
-Return exactly this structure:
+Extract the following from the job description and return ONLY a valid JSON object. No explanation. No markdown. No code fences.
 
 {
   "job_title": "Exact job title from the JD, e.g. Software Development Engineer Intern",
   "company_name": "Company name if mentioned, else null",
-  "required_skills": ["every", "technical", "skill", "explicitly", "required"],
-  "preferred_skills": ["skills", "mentioned", "as", "good", "to", "have"],
-  "key_responsibilities": [
-    "Short phrase describing one main responsibility",
-    "Another responsibility"
-  ],
-  "keywords": ["all", "important", "domain", "and", "technical", "keywords", "from", "the", "JD", "that", "an", "ATS", "would", "scan", "for"],
+  "required_skills": ["every technical skill explicitly required; max 15"],
+  "preferred_skills": ["skills mentioned as good to have; max 10"],
+  "key_responsibilities": ["short phrase per main responsibility; max 6"],
+  "keywords": ["all important domain and technical keywords an ATS would scan for; max 20"],
   "experience_level": "Internship / Entry Level / Mid Level / Senior Level",
-  "domain": "e.g. Backend, Frontend, Full Stack, Data Science, ML, DevOps, etc."
-}`;
+  "domain": "e.g. Backend, Frontend, Full Stack, Data Science, ML, DevOps"
+}
 
-const resumeContentSystemPrompt = `You are an expert technical resume writer specializing in resumes for software engineering students and fresh graduates applying to tech companies.
+Rules:
+- required_skills: only skills the JD explicitly lists as required. Never guess.
+- Deduplicate every list; order by importance (most relevant first).
+- keywords: use exact terms as written in the JD (e.g. "React", not "react").
+- Exclude any skill the JD does not mention.`;
 
-Your task is to write a complete, ATS-optimized resume tailored specifically for the job description provided.
+const resumeContentSystemPrompt = `You are an expert technical resume writer for software engineering students and fresh graduates targeting tech companies. Write a complete, ATS-optimized resume tailored to the job description (JD).
 
-INSTRUCTIONS:
-1. SKILLS SECTION:
-   - Collect ALL unique technical skills across all 4 projects.
-   - Add any additional skills from the JD that are clearly demonstrated by the projects (do not invent skills not present in projects).
-   - Prioritize and list first the skills that appear in the JD.
-   - Categorize into: Programming Languages, Frameworks & Libraries, Tools & Technologies, Databases.
-   - FILTERING RULES (apply these strictly):
-     a) Remove ALL duplicates — if a skill appears in multiple categories, keep it only in the most relevant category.
-     b) Remove these minor packages entirely: CSS utilities (clsx, class-variance-authority, cva), date utilities (date-fns, moment, dayjs), icon libraries (Lucide React, React Icons), carousel libraries (Embla Carousel, Swiper), environment tools (dotenv), and any sub-packages of already-listed frameworks.
-     c) Databases section: ONLY include actual databases and ORMs — PostgreSQL, MongoDB, MySQL, Firebase, Redis, Prisma, Supabase, DynamoDB. Never include UI libraries, styling tools, or utilities.
-     d) Tools & Technologies: ONLY developer tools, platforms, and services — Git, Docker, AWS, CI/CD, testing frameworks. Never include UI libraries, CSS frameworks, or styling tools.
-     e) If a skill is already listed as a Framework, do NOT repeat it in Tools.
-   - Never leave any category empty. If a category would otherwise be empty, reuse the closest relevant skill from the provided project data instead of omitting it.
-   - Use exact, comma-separated technology names from the candidate's repository data.
+RULES:
 
-2. PROJECTS SECTION (most important section):
-   - For each project, write exactly 3 bullet points.
-   - Every bullet point must:
-     a) Start with a strong past-tense action verb (Built, Developed, Implemented, Designed, Integrated, Optimized, Engineered, Automated, Deployed, Architected, Reduced, Improved)
-     b) Mention specific technologies used — use the EXACT spelling and casing from the JD where they match (e.g. if JD says "Node.js", write "Node.js" exactly; if JD says "React", write "React" not "react")
-     c) Include a measurable result or scale wherever possible (e.g. "reducing API response time by 40%", "supporting 500+ concurrent users", "handling 10,000+ records")
-     d) If no measurement is available, describe the specific technical complexity or impact instead
-   - Do NOT write vague bullets like "worked on frontend" or "used good practices"
-   - Do NOT mention skills or technologies not present in the project data
-   - When describing a technology that appears in the JD's required_skills, use that technology name with exact casing from the JD
+SKILLS SECTION
+- Collect every unique technical skill demonstrated by the provided projects.
+- Add JD skills ONLY when the projects clearly demonstrate them. Never invent skills absent from the project data.
+- Order: JD-required skills first, then the rest.
+- Categorize into: Programming Languages, Frameworks & Libraries, Tools & Technologies, Databases.
+- No duplicates across categories; keep each skill in its single most relevant category.
+- Skip minor/utility packages: CSS utilities (clsx, class-variance-authority, cva), date libs (date-fns, moment, dayjs), icon packs (Lucide, React Icons), carousels (Embla, Swiper), dotenv, and sub-packages of listed frameworks.
+- Databases: only real databases/ORMs (PostgreSQL, MongoDB, MySQL, Firebase, Redis, Prisma, Supabase, DynamoDB).
+- Tools: only developer tools, platforms, services (Git, Docker, AWS, CI/CD, testing frameworks).
+- If a skill is already a framework, never repeat it under Tools.
+- Leave a category empty if no skill genuinely qualifies — do NOT stuff it with unrelated skills.
+- Use exact technology names from the candidate's repository data.
 
-3. KEYWORD MATCHING:
-   - Naturally embed important keywords from the JD into bullet points and skills section.
-   - Do not stuff keywords unnaturally — they must fit the sentence.
-   - Priority keywords are those in the JD's required_skills list.
-   - Use exact spelling and casing for all JD keywords found in project data.
+PROJECTS SECTION (most important)
+- Write exactly 3 bullet points per project (fewer only if the data cannot support 3).
+- Every bullet must:
+  a) Start with a strong past-tense verb (Built, Developed, Implemented, Designed, Integrated, Optimized, Engineered, Automated, Deployed, Architected, Reduced, Improved).
+  b) Name the specific technologies used — with the JD's exact spelling/casing where they match (JD "Node.js" → "Node.js", not "nodejs").
+  c) Include a measurable result or scale when plausible ("cutting API latency 40%", "serving 500+ concurrent users", "handling 10,000+ records"); otherwise describe the concrete technical complexity or impact.
+  d) Never mention technologies not present in the project data.
+- Never write vague bullets ("worked on frontend", "used good practices").
 
-4. TONE:
-   - Professional, technical, and concise.
-   - No first-person pronouns (no "I", "my", "we").
-   - Every word must earn its place.
+KEYWORD MATCHING
+- Weave JD keywords into bullets and skills naturally; never stuff. Priority: JD required_skills.
+- Use the JD's exact spelling and casing for any JD keyword found in the project data.
 
-5. FIELD RULES:
-  - header.name must be the candidate's exact name from the prompt data. Never use "Resume", "Target Role", or any generic placeholder.
-  - header.github must be the candidate's GitHub profile URL.
-  - education.college must always be populated with the candidate's college name.
-  - projects[].github_url must be a valid GitHub repository URL for that project when available.
-  - projects[].bullets must contain exactly 3 concrete bullet points.
+TONE
+- Professional, technical, concise. No first-person ("I", "my", "we"). Every word earns its place.
+
+FIELDS
+- header.name = the candidate's exact name from the prompt. Never placeholders like "Resume" or "Target Role".
+- header.github = the candidate's GitHub profile URL.
+- education.college always populated with the candidate's college name.
+- projects[].github_url = that project's actual GitHub URL when available.
+- projects[].bullets = exactly 3 concrete bullets.
 
 Return ONLY a valid JSON object. No explanation. No markdown. No code fences.
 
@@ -503,15 +499,7 @@ Return ONLY a valid JSON object. No explanation. No markdown. No code fences.
 
 const atsScoreSystemPrompt = `You are an ATS (Applicant Tracking System) evaluator.
 
-Compare the resume content against the job description and calculate a match score.
-
-Job Description Keywords and Skills:
-{{jd_keywords}}
-{{jd_required_skills}}
-{{jd_preferred_skills}}
-
-Resume Content (all text combined):
-{{resume_full_text}}
+Compare the resume content against the job description and calculate a match score. The JD keywords/skills and the resume text are provided in the user message.
 
 Return ONLY a valid JSON object. No explanation. No markdown. No code fences.
 
@@ -520,35 +508,23 @@ Return ONLY a valid JSON object. No explanation. No markdown. No code fences.
   "matched_keywords": ["React", "Node.js", "REST API"],
   "missing_keywords": ["Docker", "CI/CD"],
   "score_explanation": "One sentence explaining the score honestly.",
-  "domain_mismatch": true or false,
-  "mismatch_reason": "If domain_mismatch is true, write one clear sentence explaining WHY the profile does not match this job. If domain_mismatch is false, write null.",
-  "recommended_roles": ["If domain_mismatch is true, list 2-3 job roles that better match the candidate's actual skills. If domain_mismatch is false, return empty array."]
+  "domain_mismatch": true,
+  "mismatch_reason": "If domain_mismatch, one clear sentence explaining WHY the profile does not match this job; else null.",
+  "recommended_roles": ["If domain_mismatch, 2-3 roles matching the candidate's actual skills; else []."]
 }
 
-DOMAIN MISMATCH DETECTION RULES:
+DOMAIN MISMATCH — set domain_mismatch to true only when:
+1. The JD explicitly requires "X+ years of experience" (X >= 2) AND the resume shows a student/fresher (recent or expected graduation, "pursuing", or no professional experience). Reason: role needs significant industry experience the candidate does not yet have.
+2. The JD's PRIMARY required skills are backend frameworks (Node.js, NestJS, Express, Spring Boot, Django, FastAPI, Kotlin, Go, Rust, etc.) AND the resume shows only frontend work (React, Vue, Angular) or Firebase/BaaS with no server-side code. Reason: role needs backend experience the profile lacks.
+3. The JD's top 2-3 required skills are completely absent from the resume (neither in skills nor projects) AND they are truly core (primary language/framework).
 
-1. EXPERIENCE LEVEL MISMATCH:
-   - If the JD explicitly mentions "X+ years of experience" (where X >= 2) and the resume indicates the candidate is a student or fresher (graduation year is 2024 or later, or includes "pursuing", "expected graduation" text), set domain_mismatch to true.
-   - Mismatch reason: "This is a [X+ years] role requiring significant industry experience. As a student/fresher, this role is not suitable at this stage of your career."
+Otherwise set domain_mismatch to false — partial or adjacent experience must NOT be flagged.
 
-2. CORE BACKEND MISMATCH:
-   - If the JD has backend framework requirements (Node.js, NestJS, Express, Spring Boot, Django, FastAPI, Kotlin, Go, Rust, etc.) as PRIMARY keywords AND the resume shows no backend development (only frontend frameworks like React, Vue, Angular, or Firebase/BaaS with no server-side code), set domain_mismatch to true.
-   - Mismatch reason: "This role requires strong backend development experience with [detected framework(s)]. Your profile demonstrates frontend strength but lacks server-side backend development experience."
-
-3. PRIMARY TECH STACK ABSENCE:
-   - If the JD's top 2-3 required_skills are completely absent from the resume (not found at all, neither in skills nor in projects), set domain_mismatch to true.
-   - Only apply this if the missing skills are truly core (e.g., primary language or primary framework).
-
-4. DEFAULT (no mismatch if above do not apply):
-   - If none of the above patterns match, set domain_mismatch to false.
-
-General Rules:
-- Score is a number from 0 to 100.
-- matched_keywords: skills/keywords from JD that appear in resume.
-- missing_keywords: important skills from JD not found in resume.
-- Be accurate — do not inflate the score.
-- domain_mismatch should be false if the candidate has any partial or relevant experience, even if not a perfect match.
-- domain_mismatch should be true only when there is a genuine career stage or fundamental skill mismatch.`;
+GENERAL RULES
+- ats_score: number from 0 to 100. Be accurate — never inflate.
+- matched_keywords: JD skills/keywords that appear in the resume.
+- missing_keywords: important JD skills not found in the resume.
+- Keep both keyword lists concise: top 15 each.`;
 
 export async function summarizeRepository(input: {
   name: string;
@@ -558,14 +534,20 @@ export async function summarizeRepository(input: {
   readme: string;
   dependencies: string;
 }) {
-  const user = `Repository Data:\n- Name: ${input.name}\n- Description: ${input.description || ""}\n- Primary Language: ${Object.keys(input.languageBreakdown || {})[0] || ""}\n- All Languages: ${JSON.stringify(input.languageBreakdown)}\n- Topics/Tags: ${JSON.stringify(input.topics)}\n- README Content: ${input.readme || ""}\n- Dependencies (package.json / requirements.txt): ${input.dependencies || ""}`;
+  // READMEs can run to tens of KB; cap the slice sent to the model. Language data, topics, and
+  // dependencies already carry the tech stack, so the summary quality is unaffected.
+  const README_CHAR_LIMIT = 2000;
+  const readme = (input.readme || "").trim();
+  const readmeBlock = readme.length > README_CHAR_LIMIT ? `${readme.slice(0, README_CHAR_LIMIT)}\n...(truncated)` : readme;
 
-  return callJson<RepoSummary>(repositorySummarySystemPrompt, user, validateRepoSummary);
+  const user = `Repository Data:\n- Name: ${input.name}\n- Description: ${input.description || ""}\n- Primary Language: ${Object.keys(input.languageBreakdown || {})[0] || ""}\n- All Languages: ${JSON.stringify(input.languageBreakdown)}\n- Topics/Tags: ${JSON.stringify(input.topics)}\n- README Content: ${readmeBlock}\n- Dependencies (package.json / requirements.txt): ${input.dependencies || ""}`;
+
+  return callJson<RepoSummary>(repositorySummarySystemPrompt, user, validateRepoSummary, undefined, MAX_TOKENS.repo);
 }
 
 export async function extractJobMeta(jd: string) {
   const user = `Job Description:\n${jd}`;
-  return callJson<JobAnalysis>(jobAnalysisSystemPrompt, user, validateJobAnalysis);
+  return callJson<JobAnalysis>(jobAnalysisSystemPrompt, user, validateJobAnalysis, undefined, MAX_TOKENS.job);
 }
 
 function findSkillCaseInJd(skillName: string, jobAnalysis: JobAnalysis): string {
@@ -649,7 +631,7 @@ export async function generateResumeContent(user: UserProfile, jd: string, repos
   });
   console.info("[resume] exact prompt", userPrompt);
 
-  const parsed = await callJson<ResumeContent>(resumeContentSystemPrompt, userPrompt, validateResumeContent, "resume");
+  const parsed = await callJson<ResumeContent>(resumeContentSystemPrompt, userPrompt, validateResumeContent, "resume", MAX_TOKENS.resume);
 
   const normalizedRepoData = selectedRepos.map((repo) => ({
     repo,
@@ -801,5 +783,5 @@ export async function evaluateAtsScore(input: {
   resumeFullText: string;
 }) {
   const user = `Job Description Keywords and Skills:\n${JSON.stringify(input.jdKeywords)}\n${JSON.stringify(input.jdRequiredSkills)}\n${JSON.stringify(input.jdPreferredSkills)}\n\nResume Content (all text combined):\n${input.resumeFullText}`;
-  return callJson<AtsAnalysis>(atsScoreSystemPrompt, user, validateAtsAnalysis);
+  return callJson<AtsAnalysis>(atsScoreSystemPrompt, user, validateAtsAnalysis, undefined, MAX_TOKENS.ats);
 }
