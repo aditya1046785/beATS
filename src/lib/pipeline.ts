@@ -69,6 +69,8 @@ export async function processGithubForUser(user: UserProfile) {
     updatedAt: string;
   }> = [];
 
+  console.info("[pipeline] processGithubForUser started", { user: user.githubUsername });
+
   try {
     await setProgress(user.id, "Fetching your repositories...", 10);
     const [repos, pinnedNames] = await Promise.all([
@@ -113,6 +115,13 @@ export async function processGithubForUser(user: UserProfile) {
     const total = validRepos.length;
     let completed = 0;
 
+    console.info("[pipeline] phase: github sync", {
+      totalRepos: validRepos.length,
+      toProcess: toProcess.length,
+      skippedUnchanged: validRepos.length - toProcess.length,
+      snapshot: repoSnapshot.map((r) => r.name),
+    });
+
     const batchSize = 8; // between 8-10 as required
     function sleep(ms: number) {
       return new Promise((res) => setTimeout(res, ms));
@@ -132,6 +141,13 @@ export async function processGithubForUser(user: UserProfile) {
           githubProcessingRepos: repoSnapshot,
         },
       );
+
+      const batchStartedAt = Date.now();
+      console.info("[pipeline] phase: batch start", {
+        batchIndex: Math.floor(i / batchSize) + 1,
+        batchSize: batch.length,
+        repos: batch.map((b) => b.repo.name),
+      });
 
       // Start fetching files for all repos in the batch in parallel
       const fileFetchPromises = batch.map(async ({ repo }) => {
@@ -193,7 +209,15 @@ export async function processGithubForUser(user: UserProfile) {
             return;
           }
 
+          const repoStartedAt = Date.now();
+          console.info(`[pipeline] ${repo.name}: files fetched`, {
+            hasReadme: Boolean(files.readme),
+            languages: Object.keys(files.languages),
+            phase: "github-fetch",
+          });
+
           // Start AI summarization
+          console.info(`[pipeline] ${repo.name}: phase=openrouter summarize, starting`);
           const aiSummary = await summarizeRepository({
             name: repo.name,
             description: repo.description || "",
@@ -201,6 +225,9 @@ export async function processGithubForUser(user: UserProfile) {
             languageBreakdown: files.languages,
             readme: files.readme,
             dependencies: [files.packageJson, files.requirements, files.pom, files.gradle].filter(Boolean).join("\n\n"),
+          });
+          console.info(`[pipeline] ${repo.name}: phase=openrouter summarize, done`, {
+            elapsedMs: Date.now() - repoStartedAt,
           });
 
           // Immediately start embedding in parallel with other AI calls
@@ -223,15 +250,25 @@ export async function processGithubForUser(user: UserProfile) {
           };
 
           try {
+            console.info(`[pipeline] ${repo.name}: phase=gemini embedding, starting`, {
+              textLength: summaryText(record).length,
+            });
             const vec = await embedText(summaryText(record));
             record.vectorEmbedding = vec;
+            console.info(`[pipeline] ${repo.name}: phase=gemini embedding, done`, {
+              dimensions: vec.length,
+              elapsedMs: Date.now() - repoStartedAt,
+            });
           } catch (embedErr) {
-            console.error("Embedding failed for repo", repo.name, embedErr);
+            console.error(`[pipeline] ${repo.name}: embedding failed, storing empty vector`, embedErr);
             record.vectorEmbedding = [];
           }
 
           nextRepositories.push(record);
           completed += 1;
+          console.info(`[pipeline] ${repo.name}: done (${completed}/${total})`, {
+            elapsedMs: Date.now() - repoStartedAt,
+          });
           await setProgress(
             user.id,
             `Analyzing your projects... (${completed} of ${total} complete)`,
@@ -277,8 +314,15 @@ export async function processGithubForUser(user: UserProfile) {
 
       // Wait 1 second between batches to avoid hitting Anthropic / OpenRouter limits
       await sleep(1000);
+      console.info("[pipeline] phase: batch finished", {
+        batchIndex: Math.floor(i / batchSize) + 1,
+        completed,
+        total,
+        elapsedMs: Date.now() - batchStartedAt,
+      });
     }
 
+    console.info("[pipeline] phase: all batches done", { completed, total });
     await setProgress(user.id, "Finishing up...", 90);
     await upsertUserRepositories(user.id, nextRepositories);
     await updateData((data) => {
@@ -293,6 +337,10 @@ export async function processGithubForUser(user: UserProfile) {
       current.githubProcessingTotal = total;
       current.githubProcessingRepos = repoSnapshot;
       current.lastGithubSyncAt = new Date().toISOString();
+    });
+    console.info("[pipeline] processGithubForUser completed successfully", {
+      user: user.githubUsername,
+      reposProcessed: nextRepositories.length,
     });
   } catch (error) {
     if (error instanceof RateLimitError) {
@@ -324,6 +372,10 @@ export async function processGithubForUser(user: UserProfile) {
       current.githubProcessingTotal = current.githubProcessingTotal || repoSnapshot.length || 0;
       current.githubProcessingRepos = current.githubProcessingRepos || repoSnapshot;
       current.githubProcessingError = userFacingError(error);
+    });
+    console.error("[pipeline] processGithubForUser FAILED", {
+      user: user.githubUsername,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

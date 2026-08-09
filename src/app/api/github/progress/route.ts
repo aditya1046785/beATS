@@ -29,6 +29,7 @@ export async function GET() {
             repos: fresh.githubProcessingRepos || [],
             error: fresh.githubProcessingError || "",
             processing: Boolean(fresh.githubProcessing),
+            processed: Boolean(fresh.githubProcessed),
             processedAt: fresh.lastGithubSyncAt || null,
           });
 

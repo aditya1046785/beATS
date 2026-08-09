@@ -265,7 +265,7 @@ function repoRecordToRow(repo: RepositoryRecord) {
     is_pinned: repo.isPinned,
     stars: repo.stars,
     ai_summary: repo.aiSummary,
-    vector_embedding: repo.vectorEmbedding,
+    vector_embedding: repo.vectorEmbedding.length ? repo.vectorEmbedding : null,
     github_updated_at: repo.githubUpdatedAt,
     last_synced_at: repo.lastSyncedAt,
   };

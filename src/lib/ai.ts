@@ -1,18 +1,50 @@
 import "server-only";
+import fs from "node:fs";
+import path from "node:path";
 import { AtsAnalysis, JobAnalysis, RepoSummary, RepositoryRecord, ResumeContent, UserProfile } from "./types";
 
-const MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-5.6-luna";
-const OPENROUTER_TIMEOUT_MS = Number(process.env.OPENROUTER_TIMEOUT_MS || 45000);
+function readLocalEnv() {
+  const envPath = path.join(process.cwd(), ".env.local");
+  if (!fs.existsSync(envPath)) return {};
+
+  const vars: Record<string, string> = {};
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 0) continue;
+
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    vars[key] = value;
+  }
+
+  return vars;
+}
+
+function getEnvValue(key: string) {
+  const localEnv = readLocalEnv();
+  return localEnv[key] || process.env[key] || "";
+}
+
+const MODEL = getEnvValue("OPENROUTER_MODEL") || "openai/gpt-5.6-luna";
+const OPENROUTER_TIMEOUT_MS = Number(getEnvValue("OPENROUTER_TIMEOUT_MS") || 45000);
 
 async function callOpenRouter(system: string, user: string) {
-  if (!process.env.OPENROUTER_API_KEY) {
+  const apiKey = getEnvValue("OPENROUTER_API_KEY");
+  if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is required");
   }
 
+  const referer = getEnvValue("NEXT_PUBLIC_APP_URL") || "http://localhost:3000";
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY || ""}`,
-    "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    Authorization: `Bearer ${apiKey}`,
+    "HTTP-Referer": referer,
     "X-Title": "PositionPerfect AI",
   };
 
@@ -38,34 +70,62 @@ async function callOpenRouter(system: string, user: string) {
     userLength: user.length,
   });
 
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers,
-      signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
-      body: JSON.stringify({
+  let response: Response;
+  try {
+    response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers,
+        signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 3500,
+          temperature: 0.2,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+        }),
+      }
+    );
+  } catch (error) {
+    const elapsed = Date.now() - startedAt;
+    if (error instanceof Error && error.name === "TimeoutError") {
+      console.error("[openrouter] TIMED OUT", {
         model: MODEL,
-        max_tokens: 3500,
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
+        promptType,
+        timeoutMs: OPENROUTER_TIMEOUT_MS,
+        durationMs: elapsed,
+      });
+      throw new Error(
+        `OpenRouter request timed out after ${OPENROUTER_TIMEOUT_MS}ms. Check network access to openrouter.ai and that the model "${MODEL}" is responding.`,
+      );
     }
-  );
+    console.error("[openrouter] request error", {
+      model: MODEL,
+      promptType,
+      durationMs: elapsed,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error(`OpenRouter request error: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  const status = response.status;
+  const detail = await response.text().catch(() => "");
   console.info("[openrouter] request finished", {
     model: MODEL,
     promptType,
-    status: response.status,
-    durationMs: Date.now() - startedAt,
+    status,
+    durationMs,
+    responseBytes: detail.length,
   });
+
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`OpenRouter request failed: ${response.status} ${detail.slice(0, 300)}`);
+    throw new Error(`OpenRouter request failed: ${status} ${detail.slice(0, 300)}`);
   }
-  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const payload = JSON.parse(detail) as { choices?: Array<{ message?: { content?: string } }> };
   return payload.choices?.[0]?.message?.content || "";
 }
 

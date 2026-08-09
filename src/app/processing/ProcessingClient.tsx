@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Check, Circle, RotateCw } from "lucide-react";
 import { formatDate } from "@/lib/formatDate";
@@ -105,6 +106,19 @@ export default function ProcessingClient() {
       if (source) source.close();
     };
   }, [timedOut]);
+
+  // Redirect to dashboard when processing is complete
+  const router = useRouter();
+  useEffect(() => {
+    if (status.processed) {
+      // brief delay so user sees the success state briefly
+      const id = setTimeout(() => {
+        router.replace("/dashboard");
+      }, 700);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [status.processed, router]);
 
   async function retry() {
     setRetrying(true);

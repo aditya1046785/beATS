@@ -23,9 +23,13 @@ export class RateLimitError extends Error {
   }
 }
 
+const GITHUB_TIMEOUT_MS = Number(process.env.GITHUB_TIMEOUT_MS || 20000);
+
 async function githubFetch<T>(token: string, url: string, init: RequestInit = {}): Promise<T> {
+  const startedAt = Date.now();
   const response = await fetch(url, {
     ...init,
+    signal: init.signal ?? AbortSignal.timeout(GITHUB_TIMEOUT_MS),
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
@@ -33,6 +37,10 @@ async function githubFetch<T>(token: string, url: string, init: RequestInit = {}
       ...(init.headers || {}),
     },
   });
+  const elapsed = Date.now() - startedAt;
+  if (elapsed > 5000) {
+    console.info("[github] slow response", { url, status: response.status, elapsedMs: elapsed });
+  }
   if (!response.ok) {
     const remaining = Number(response.headers.get("x-ratelimit-remaining") || "");
     const resetAt = Number(response.headers.get("x-ratelimit-reset") || "0") * 1000;
@@ -96,6 +104,7 @@ export async function fetchAllRepos(token: string) {
     repos.push(...batch);
     if (batch.length < 100) break;
   }
+  console.info("[github] fetchAllRepos done", { count: repos.length });
   return repos;
 }
 
