@@ -289,11 +289,29 @@ li { margin: 2px 0; }
 </style></body></html>`;
 }
 
-export async function renderHtmlToPdf(html: string, absolutePath: string) {
-  const puppeteer = await import("puppeteer");
-  const browser = await puppeteer.default.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+// Renders HTML to a PDF and returns it as an in-memory Buffer — nothing is
+// written to the local filesystem, so this works on Vercel's serverless functions.
+// Locally it uses full 'puppeteer' (which bundles its own Chrome, easy for dev).
+// In production (Vercel), it uses 'puppeteer-core' + '@sparticuz/chromium',
+// a Chromium build packaged specifically to run inside serverless functions.
+export async function renderHtmlToPdf(html: string): Promise<Buffer> {
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+  let browser;
+  if (isServerless) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    const puppeteerCore = await import("puppeteer-core");
+    browser = await puppeteerCore.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  } else {
+    const puppeteer = await import("puppeteer");
+    browser = await puppeteer.default.launch({
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+  }
 
   try {
     const page = await browser.newPage();
@@ -302,8 +320,7 @@ export async function renderHtmlToPdf(html: string, absolutePath: string) {
       timeout: Number(process.env.PDF_RENDER_TIMEOUT_MS || 15000),
     });
     await page.emulateMediaType("print");
-    await page.pdf({
-      path: absolutePath,
+    const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       margin: {
@@ -314,13 +331,10 @@ export async function renderHtmlToPdf(html: string, absolutePath: string) {
       },
     });
     await page.close();
+    return Buffer.from(pdfBuffer);
   } finally {
     await browser.close();
   }
-}
-
-export async function writeSimplePdf(html: string, absolutePath: string) {
-  return renderHtmlToPdf(html, absolutePath);
 }
 
 export function calculateAtsScore(jd: string, resumeHtml: string) {

@@ -265,7 +265,7 @@ function repoRecordToRow(repo: RepositoryRecord) {
     is_pinned: repo.isPinned,
     stars: repo.stars,
     ai_summary: repo.aiSummary,
-    vector_embedding: repo.vectorEmbedding.length ? repo.vectorEmbedding : null,
+    vector_embedding: repo.vectorEmbedding,
     github_updated_at: repo.githubUpdatedAt,
     last_synced_at: repo.lastSyncedAt,
   };
@@ -489,13 +489,16 @@ export async function getResumeForUser(userId: string, resumeId: string) {
   return data ? resumeRowToRecord(data) : undefined;
 }
 
-// NOTE: PDF storage still needs to move off the local filesystem (Vercel is read-only
-// outside /tmp). This function currently only builds a path string — the actual file
-// write happens wherever your PDF-generation code calls fs.writeFile with this path.
-// Share that code and we'll switch it to Supabase Storage (or Vercel Blob) next.
-export function generatedPdfPath(fileName: string) {
-  return {
-    absolute: `/tmp/${fileName}`, // temporary — not persistent, just avoids the immediate crash
-    publicUrl: `/generated-resumes/${fileName}`, // will need to become a real Storage URL
-  };
+// Uploads a generated PDF buffer to the 'resumes' bucket in Supabase Storage
+// and returns its public URL. Replaces local filesystem writes, which don't
+// persist (and aren't even writable) on Vercel's serverless functions.
+export async function uploadResumePdf(fileName: string, pdfBuffer: Buffer): Promise<string> {
+  const { error } = await supabaseAdmin.storage.from("resumes").upload(fileName, pdfBuffer, {
+    contentType: "application/pdf",
+    upsert: true,
+  });
+  if (error) throw error;
+
+  const { data } = supabaseAdmin.storage.from("resumes").getPublicUrl(fileName);
+  return data.publicUrl;
 }

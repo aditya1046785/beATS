@@ -4,8 +4,12 @@ import { evaluateAtsScore, extractJobMeta, generateResumeContent } from "../../.
 import { embedText } from "@/lib/embeddings";
 import { normalizeResumeContent, renderResumeHtml, renderHtmlToPdf } from "@/lib/resume";
 import { selectRelevantRepos } from "@/lib/selection";
-import { addResume, generatedPdfPath, getUserRepositories, saveUser } from "@/lib/store";
+import { addResume, getUserRepositories, saveUser, uploadResumePdf } from "@/lib/store";
 import { ResumeRecord } from "@/lib/types";
+
+// Chromium launch + PDF rendering can take longer than the default serverless
+// timeout, especially on a cold start. Extend it explicitly.
+export const maxDuration = 60;
 
 function cleanJd(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -19,17 +23,14 @@ function sanitizeResumeError(error: unknown) {
   if (message.includes("OPENROUTER_API_KEY")) {
     return "OpenRouter API key is missing. Add OPENROUTER_API_KEY in .env.local and restart the server.";
   }
-  if (
-    message.includes("Sentence Transformers") ||
-    message.includes("sentence_transformers") ||
-    message.includes("all-MiniLM-L6-v2") ||
-    message.includes("huggingface.co") ||
-    message.includes("Connection reset")
-  ) {
-    return "Local embedding failed for all-MiniLM-L6-v2. sentence-transformers is installed, but model fetch/load from Hugging Face failed. Ensure stable access to huggingface.co, pre-download the model in ./venv, then retry.";
+  if (message.includes("GEMINI_API_KEY") || message.includes("Gemini embeddings request failed")) {
+    return "Embedding request failed. Please check your GEMINI_API_KEY and try again.";
   }
   if (message.includes("AI returned malformed JSON") || message.includes("JSON")) {
     return "AI returned an invalid resume format. Please try again.";
+  }
+  if (message.includes("Could not find Chrome") || message.includes("chromium")) {
+    return "PDF generation failed on the server. Please try again in a moment.";
   }
   return "Something went wrong. Please try again.";
 }
@@ -101,11 +102,12 @@ export async function POST(request: NextRequest) {
     });
     console.info("[resume] ats scoring completed", { ats: ats.ats_score, durationMs: Date.now() - atsStartedAt });
     const id = crypto.randomUUID();
-    const pdf = generatedPdfPath(`${id}.pdf`);
     const pdfStartedAt = Date.now();
-    console.info("[resume] pdf render started", { absolutePath: pdf.absolute });
-    await renderHtmlToPdf(html, pdf.absolute);
-    console.info("[resume] pdf render completed", { durationMs: Date.now() - pdfStartedAt });
+    console.info("[resume] pdf render started", { id });
+    const pdfBuffer = await renderHtmlToPdf(html);
+    console.info("[resume] pdf render completed", { durationMs: Date.now() - pdfStartedAt, bytes: pdfBuffer.length });
+    const pdfUrl = await uploadResumePdf(`${id}.pdf`, pdfBuffer);
+    console.info("[resume] pdf uploaded", { pdfUrl });
     const resume: ResumeRecord = {
       id,
       userId: user.id,
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
       selectedRepoIds: selected.map((repo) => repo.id),
       generatedResumeContent: content,
       generatedResumeHtml: html,
-      pdfFilePath: pdf.publicUrl,
+      pdfFilePath: pdfUrl,
       atsMatchScore: ats.ats_score,
       atsMatchedKeywords: ats.matched_keywords,
       atsMissedKeywords: ats.missing_keywords,
