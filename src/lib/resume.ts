@@ -302,9 +302,9 @@ export async function renderHtmlToPdf(html: string): Promise<Buffer> {
     const chromium = (await import("@sparticuz/chromium")).default;
     const puppeteerCore = await import("puppeteer-core");
     browser = await puppeteerCore.launch({
-      args: chromium.args,
+      args: await puppeteerCore.defaultArgs({ args: chromium.args, headless: "shell" }),
       executablePath: await chromium.executablePath(),
-      headless: true,
+      headless: "shell",
     });
   } else {
     const puppeteer = await import("puppeteer");
