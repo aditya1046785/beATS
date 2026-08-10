@@ -62,8 +62,6 @@ export async function POST(request: NextRequest) {
     console.info("[resume] started", { userId: user.id, jdLength: jd.length, repos: repos.length });
     const jdEmbedding = await embedText(jd);
     console.info("[resume] jd embedding created", { dimensions: jdEmbedding.length });
-    const selected = selectRelevantRepos(repos, jdEmbedding);
-    console.info("[resume] repos selected", selected.map((repo) => repo.githubRepoName));
     const meta = await extractJobMeta(jd).catch((error: unknown) => {
       console.error("[resume] job metadata extraction failed; continuing", error);
       return {
@@ -78,6 +76,9 @@ export async function POST(request: NextRequest) {
       };
     });
     console.info("[resume] job metadata ready", meta);
+    const jdKeywords = [...meta.required_skills, ...meta.preferred_skills, ...meta.keywords];
+    const selected = selectRelevantRepos(repos, jdEmbedding, jdKeywords);
+    console.info("[resume] repos selected", selected.map((repo) => repo.githubRepoName));
     const content = normalizeResumeContent(await generateResumeContent(user, jd, selected, meta));
     console.info("[resume] content generated", { projects: content.projects.length });
     const html = renderResumeHtml(content);

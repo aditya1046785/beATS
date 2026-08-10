@@ -9,13 +9,16 @@ function summaryText(repo: RepositoryRecord) {
   return [
     repo.aiSummary.one_liner,
     repo.aiSummary.what_it_does,
+    repo.aiSummary.impact_or_scale,
     repo.aiSummary.tech_skills.languages.join(", "),
     repo.aiSummary.tech_skills.frameworks.join(", "),
     repo.aiSummary.tech_skills.tools.join(", "),
     repo.aiSummary.tech_skills.concepts.join(", "),
     repo.aiSummary.notable_implementations.join(", "),
     repo.aiSummary.relevant_roles.join(", "),
-  ].join(". ");
+  ]
+    .filter(Boolean)
+    .join(". ");
 }
 
 async function setProgress(

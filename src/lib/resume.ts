@@ -214,12 +214,51 @@ const escapeHtml = (value: string) =>
 
 const list = (items: string[]) => items.filter(Boolean).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
 
+const KNOWN_ACRONYMS = new Set([
+  "ai", "ui", "ux", "api", "apis", "url", "urls", "pdf", "sdk", "cli", "css", "html", "js", "ts", "sql", "jwt", "crm", "erp", "cms", "seo", "qr",
+]);
+
+const COMPOUND_FIXUPS: Array<[RegExp, string]> = [
+  [/\bLinked In\b/gi, "LinkedIn"],
+  [/\bGit Hub\b/gi, "GitHub"],
+  [/\bJava Script\b/gi, "JavaScript"],
+  [/\bType Script\b/gi, "TypeScript"],
+];
+
+// Repo names are usually slugs (kebab-case, camelCase, PascalCase) — this turns
+// something like "linkedInReelAI" or "framesense-app" into a readable resume
+// title like "LinkedIn Reel AI" or "Framesense App".
+function humanizeProjectName(name: string): string {
+  const spaced = name
+    .replace(/[-_.]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .trim();
+
+  let title = spaced
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const isKnownAcronym = KNOWN_ACRONYMS.has(word.toLowerCase());
+      const isAllCapsInSource = /^[A-Z]{2,5}$/.test(word); // e.g. "ATS", "NGO" — already uppercase in the repo name
+      if (isKnownAcronym || isAllCapsInSource) return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+
+  for (const [pattern, replacement] of COMPOUND_FIXUPS) {
+    title = title.replace(pattern, replacement);
+  }
+
+  return title || name;
+}
+
 export function renderResumeHtml(content: ResumeContent) {
   const headerLinks = [
     content.header.linkedinUrl,
     content.header.githubUrl,
     content.header.portfolioUrl,
-  ].filter(Boolean);
+  ].filter((link): link is string => Boolean(link));
 
   const skills = content.technicalSkills;
   const experience = content.experience?.length
@@ -228,7 +267,7 @@ export function renderResumeHtml(content: ResumeContent) {
           (item) =>
             `<div class="item"><div class="row"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(
               item.duration,
-            )}</span></div><div>${escapeHtml(item.company)}</div><ul>${list(item.bullets)}</ul></div>`,
+            )}</span></div><div class="subline">${escapeHtml(item.company)}</div><ul>${list(item.bullets)}</ul></div>`,
         )
         .join("")}</section>`
     : "";
@@ -237,21 +276,24 @@ export function renderResumeHtml(content: ResumeContent) {
     ? `<section><h2>Achievements</h2><ul>${list(content.achievements)}</ul></section>`
     : "";
 
+  const linkTag = (href: string) =>
+    `<a class="link" href="${escapeHtml(href)}">${escapeHtml(href.replace(/^https?:\/\//, ""))}</a>`;
+
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
     content.header.fullName,
   )} Resume</title></head><body>
 <div class="page">
 <header>
   <h1>${escapeHtml(content.header.fullName)}</h1>
-  <p>${[content.header.phone, content.header.email, content.header.city].filter(Boolean).map(escapeHtml).join(" | ")}</p>
-  <p>${headerLinks.map((link) => `<span>${escapeHtml(link || "")}</span>`).join(" | ")}</p>
+  <p class="contact-line">${[content.header.phone, content.header.email, content.header.city].filter(Boolean).map(escapeHtml).join("  |  ")}</p>
+  ${headerLinks.length ? `<p class="links-line">${headerLinks.map(linkTag).join("  |  ")}</p>` : ""}
 </header>
 <section><h2>Education</h2>${content.education
     .map(
       (item) =>
         `<div class="row"><strong>${escapeHtml(item.collegeName)}</strong><span>${escapeHtml(
           item.graduationYear,
-        )}</span></div><div>${escapeHtml(item.degree)} | CGPA: ${escapeHtml(item.cgpa)}</div>`,
+        )}</span></div><div class="subline">${escapeHtml(item.degree)}  |  CGPA: ${escapeHtml(item.cgpa)}</div>`,
     )
     .join("")}</section>
 <section><h2>Technical Skills</h2>
@@ -263,9 +305,9 @@ export function renderResumeHtml(content: ResumeContent) {
 <section><h2>Projects</h2>${content.projects
     .map(
       (project) =>
-        `<div class="item"><div class="row"><strong>${escapeHtml(project.name)}</strong><span>${escapeHtml(
+        `<div class="item"><div class="row"><strong>${escapeHtml(humanizeProjectName(project.name))}</strong><span class="tech-stack">${escapeHtml(
           project.technologies.join(", "),
-        )}</span></div><div>${escapeHtml(project.githubLink)}</div><ul>${list(project.bullets)}</ul></div>`,
+        )}</span></div><div class="subline">${linkTag(project.githubLink)}</div><ul>${list(project.bullets)}</ul></div>`,
     )
     .join("")}</section>
 ${experience}
@@ -274,17 +316,23 @@ ${achievements}
 <style>
 @page { size: A4; margin: 14mm; }
 * { box-sizing: border-box; }
-body { margin: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 1.35; }
+body { margin: 0; background: #fff; color: #1a1a1a; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 1.45; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .page { width: 210mm; min-height: 297mm; padding: 14mm; margin: 0 auto; background: #fff; }
-header { text-align: center; border-bottom: 1px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
-h1 { font-size: 22px; margin: 0 0 3px; letter-spacing: 0; }
-h2 { font-size: 13px; margin: 9px 0 4px; text-transform: uppercase; border-bottom: 1px solid #000; letter-spacing: 0; }
+header { text-align: center; border-bottom: 1.5px solid #1a1a1a; padding-bottom: 8px; margin-bottom: 12px; }
+h1 { font-size: 25px; font-weight: 700; margin: 0 0 5px; letter-spacing: 0.3px; color: #111; }
+.contact-line { font-size: 10.5px; color: #444; margin: 2px 0; }
+.links-line { font-size: 10.5px; margin: 3px 0 0; }
+h2 { font-size: 13px; font-weight: 700; margin: 16px 0 6px; text-transform: uppercase; border-bottom: 1px solid #1a1a1a; padding-bottom: 2px; letter-spacing: 0.6px; color: #111; }
+section:first-of-type h2 { margin-top: 0; }
 p { margin: 2px 0; }
-ul { margin: 3px 0 6px 16px; padding: 0; }
-li { margin: 2px 0; }
+.subline { color: #555; font-size: 10.5px; margin: 1px 0 3px; }
+.tech-stack { color: #555; font-size: 10px; font-style: italic; text-align: right; }
+ul { margin: 4px 0 8px 16px; padding: 0; }
+li { margin: 2.5px 0; }
 .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .row span { text-align: right; }
-.item { margin-bottom: 6px; }
+.item { margin-bottom: 9px; }
+a.link { color: #1a5276; text-decoration: none; }
 @media print { body { background: #fff; } .page { margin: 0; padding: 0; width: auto; min-height: auto; } }
 </style></body></html>`;
 }
