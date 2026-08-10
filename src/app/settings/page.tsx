@@ -11,7 +11,7 @@ export default async function SettingsPage() {
           <Link className="text-sm text-indigo-300" href="/dashboard">← Dashboard</Link>
           <h1 className="text-3xl font-bold">Settings</h1>
         </div>
-        <SettingsClient user={user} />
+        <SettingsClient user={user} razorpayConfigured={Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)} />
       </div>
     </main>
   );

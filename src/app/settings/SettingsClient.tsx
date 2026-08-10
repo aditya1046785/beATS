@@ -30,12 +30,13 @@ function Toggle({ title, description, initial = true }: { title: string; descrip
   );
 }
 
-export default function SettingsClient({ user }: { user: UserProfile }) {
+export default function SettingsClient({ user, razorpayConfigured }: { user: UserProfile; razorpayConfigured: boolean }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
   const [history, setHistory] = useState<PaymentRecord[]>([]);
   const [paying, setPaying] = useState<"monthly" | "annual" | null>(null);
+  const [mockCheckout, setMockCheckout] = useState<{ plan: "monthly" | "annual"; orderId: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -86,6 +87,10 @@ export default function SettingsClient({ user }: { user: UserProfile }) {
       const orderResponse = await fetch("/api/payments/razorpay-order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
       const order = await orderResponse.json();
       if (!orderResponse.ok) throw new Error(order.error || "Could not create payment order.");
+      if (order.mock) {
+        setMockCheckout({ plan, orderId: order.id });
+        return;
+      }
       const loaded = await loadRazorpay();
       if (!loaded || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded.");
       const checkout = new window.Razorpay({
@@ -108,6 +113,25 @@ export default function SettingsClient({ user }: { user: UserProfile }) {
       checkout.open();
     } catch (error) {
       setPaymentMessage(error instanceof Error ? error.message : "Could not start payment.");
+    } finally {
+      setPaying(null);
+    }
+  }
+
+  async function confirmMockPayment() {
+    if (!mockCheckout) return;
+    setPaying(mockCheckout.plan);
+    setPaymentMessage("");
+    try {
+      const paymentId = `mock_pay_${mockCheckout.orderId}`;
+      const verifyResponse = await fetch("/api/payments/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: mockCheckout.plan, order_id: mockCheckout.orderId, payment_id: paymentId, signature: "mock", mock: true }) });
+      const result = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(result.error || "Payment verification failed.");
+      setMockCheckout(null);
+      setPaymentMessage("Test payment successful. Your account is now Pro.");
+      router.refresh();
+    } catch (error) {
+      setPaymentMessage(error instanceof Error ? error.message : "Could not complete test payment.");
     } finally {
       setPaying(null);
     }
@@ -154,6 +178,7 @@ export default function SettingsClient({ user }: { user: UserProfile }) {
           ) : (
             <div className="mt-5 grid gap-4"><div className="rounded-lg border border-emerald-500/30 p-4"><p className="font-semibold text-emerald-300">PRO PLAN ✓</p><p className="text-zinc-400">Renews on {user.planExpiryDate ? formatDate(user.planExpiryDate) : "your next billing date"}</p><p className="mt-3 text-sm text-zinc-300">• Unlimited resumes<br />• Full ATS breakdown<br />• Priority processing</p></div>{history.map((payment) => <p key={payment.id} className="rounded border border-zinc-800 p-3 text-sm">{formatDate(payment.paymentTimestamp)} · ₹{payment.amountPaid} · {payment.paymentStatus}</p>)}</div>
           )}
+          {!razorpayConfigured ? <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">🧪 Demo mode: Razorpay keys are not configured. Upgrades are simulated, no real charge happens.</p> : null}
           {paymentMessage ? <p className="mt-3 text-sm text-zinc-300">{paymentMessage}</p> : null}
         </section>
 
@@ -170,6 +195,23 @@ export default function SettingsClient({ user }: { user: UserProfile }) {
           <p className="mt-3 text-zinc-400">Permanently delete your account and all your resumes. This cannot be undone.</p>
           {!deleteConfirm ? <button onClick={() => setDeleteConfirm(true)} className="mt-4 rounded-lg border border-red-500/50 px-4 py-2 text-sm text-red-200">Delete My Account</button> : <div className="mt-4 grid gap-3 rounded-lg border border-red-500/30 p-4"><p className="text-sm text-red-100">Type your email to confirm:</p><input value={deleteEmail} onChange={(event) => setDeleteEmail(event.target.value)} className="field" /><div className="flex gap-2"><button onClick={() => setDeleteConfirm(false)} className="rounded border border-zinc-700 px-3 py-2 text-sm">Cancel</button><button onClick={remove} disabled={deleteEmail !== user.email} className="rounded bg-red-600 px-3 py-2 text-sm font-semibold disabled:opacity-40">Yes, permanently delete</button></div></div>}
         </section>
+
+        {mockCheckout ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+            <div className="w-full max-w-sm rounded-xl border border-zinc-700 bg-[#16161f] p-6">
+              <p className="inline-flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300">Demo mode</p>
+              <h3 className="mt-3 text-lg font-semibold">Confirm test payment</h3>
+              <div className="mt-4 rounded-lg border border-zinc-800 p-4 text-sm">
+                <div className="flex items-center justify-between"><span className="text-zinc-400">{mockCheckout.plan === "annual" ? "Annual Pro plan" : "Monthly Pro plan"}</span><span className="font-semibold">₹{mockCheckout.plan === "annual" ? 799 : 99}</span></div>
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">Razorpay is not configured, so no real charge happens. This simulates a successful payment and upgrades your account to Pro.</p>
+              <div className="mt-5 flex gap-3">
+                <button onClick={() => setMockCheckout(null)} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-300 hover:bg-white/5">Cancel</button>
+                <button onClick={confirmMockPayment} disabled={paying !== null} className="flex-1 rounded-lg bg-indigo-500 py-2 text-sm font-semibold text-white disabled:opacity-60">{paying ? "Processing..." : "Simulate payment"}</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 
@@ -5,8 +6,12 @@ export async function POST(request: NextRequest) {
   const user = await requireUser();
   const { plan } = await request.json();
   const amount = plan === "annual" ? 79900 : 9900;
+
+  // Demo mode: without Razorpay keys we can't create a real order, so return a
+  // mock order the client can "pay" for locally. This keeps the upgrade flow
+  // testable until real keys are configured.
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-    return NextResponse.json({ error: "Razorpay keys are not configured." }, { status: 500 });
+    return NextResponse.json({ mock: true, id: `mock_${crypto.randomUUID()}`, amount, currency: "INR" });
   }
   const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64");
   const response = await fetch("https://api.razorpay.com/v1/orders", {
