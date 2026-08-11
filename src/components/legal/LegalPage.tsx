@@ -34,8 +34,8 @@ export default function LegalPage({
               href="/"
               className="inline-flex items-center gap-1 font-['Space_Grotesk'] text-lg font-bold tracking-[-0.02em]"
             >
-              <span className="text-[#55556E]">Position</span>
-              <span className="text-[#F1F1F8]">Perfect</span>
+              <span className="text-[#55556E]">be</span>
+              <span className="text-[#F1F1F8]">ATS</span>
               <span className="rounded border border-[rgba(139,92,246,0.32)] bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[#C4B5FD]">
                 AI
               </span>

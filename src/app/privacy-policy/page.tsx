@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | PositionPerfect AI",
+  title: "Privacy Policy | beATS",
   description:
-    "Learn how PositionPerfect AI collects, uses, stores, and protects your information.",
+    "Learn how beATS collects, uses, stores, and protects your information.",
 };
 
 const lastUpdated = "August 8, 2026";
@@ -248,7 +248,7 @@ export default function PrivacyPolicyPage() {
     <LegalPage
       eyebrow="Privacy Policy"
       title="Your data deserves clarity, not fine-print fatigue."
-      intro="This Privacy Policy explains how PositionPerfect AI collects, uses, stores, and protects your information when you use the website and services."
+      intro="This Privacy Policy explains how beATS collects, uses, stores, and protects your information when you use the website and services."
       lastUpdated={lastUpdated}
       sections={sections}
     />

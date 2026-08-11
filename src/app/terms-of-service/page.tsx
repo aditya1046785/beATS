@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | PositionPerfect AI",
+  title: "Terms of Service | beATS",
   description:
-    "Review the Terms of Service that govern access to and use of PositionPerfect AI.",
+    "Review the Terms of Service that govern access to and use of beATS.",
 };
 
 const lastUpdated = "August 8, 2026";
@@ -182,7 +182,7 @@ const sections = [
 
         <h3>10. Limitation of Liability</h3>
         <p>
-          To the maximum extent permitted by applicable law, PositionPerfect AI and its
+          To the maximum extent permitted by applicable law, beATS and its
           founders or operators shall not be liable for any indirect, incidental, special,
           consequential, or punitive damages, including loss of employment opportunities,
           arising from your use of the Service.
@@ -248,7 +248,7 @@ export default function TermsOfServicePage() {
     <LegalPage
       eyebrow="Terms of Service"
       title="The rules are here so the trust can stay easy."
-      intro="These Terms of Service explain how PositionPerfect AI can be used, what you can expect from the platform, and what responsibilities stay with you."
+      intro="These Terms of Service explain how beATS can be used, what you can expect from the platform, and what responsibilities stay with you."
       lastUpdated={lastUpdated}
       sections={sections}
     />

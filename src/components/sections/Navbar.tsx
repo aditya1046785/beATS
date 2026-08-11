@@ -33,8 +33,8 @@ export default function Navbar() {
     >
       <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6 md:px-10">
         <a href="#" className="inline-flex items-start gap-1 font-heading text-lg font-bold">
-          <span className="text-[var(--text-secondary)]">Position</span>
-          <span className="text-[var(--text-primary)]">Perfect</span>
+          <span className="text-[var(--text-secondary)]">be</span>
+          <span className="text-[var(--text-primary)]">ATS</span>
           <span className="rounded bg-[rgba(59,130,246,0.15)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--text-blue)]">
             AI
           </span>

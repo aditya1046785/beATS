@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from '@/lib/theme'
 
 export const metadata: Metadata = {
-  title: "PositionPerfect AI — Resumes built for the exact role",
+  title: "beATS — Resumes built for the exact role",
   description:
     "Paste a job description. We rewrite your GitHub projects to match it and generate one tailored resume for that exact role.",
 };

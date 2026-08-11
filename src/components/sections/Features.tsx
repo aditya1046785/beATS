@@ -7,7 +7,7 @@ const featureRows = [
     id: "f1",
     label: "SMART PROJECT SELECTION",
     title: "Not all your projects matter for every role.",
-    body: "PositionPerfect reads the job description and scores each of your GitHub projects for relevance. Frontend role? It surfaces your React projects. Backend role? Your API and database work. You never have to guess what to include.",
+    body: "beATS reads the job description and scores each of your GitHub projects for relevance. Frontend role? It surfaces your React projects. Backend role? Your API and database work. You never have to guess what to include.",
     reverse: false,
   },
   {

@@ -265,7 +265,10 @@ function repoRecordToRow(repo: RepositoryRecord) {
     is_pinned: repo.isPinned,
     stars: repo.stars,
     ai_summary: repo.aiSummary,
-    vector_embedding: repo.vectorEmbedding,
+    // pgvector rejects a zero-dimension array ("vector must have at least 1 dimension").
+    // A repo with no embedding (nothing to analyze, or embedding call failed) stores
+    // NULL; repoRowToRecord reads NULL back as [].
+    vector_embedding: repo.vectorEmbedding.length ? repo.vectorEmbedding : null,
     github_updated_at: repo.githubUpdatedAt,
     last_synced_at: repo.lastSyncedAt,
   };

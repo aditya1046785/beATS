@@ -17,7 +17,7 @@ export default function FinalCTA() {
           <GradientText>never meant for the job.</GradientText>
         </h2>
         <p className="mx-auto mt-4 max-w-[480px] text-base leading-[1.7] text-[#555555] md:text-lg">
-          Your GitHub shows what you can build. PositionPerfect shows it in the language that gets
+          Your GitHub shows what you can build. beATS shows it in the language that gets
           you hired.
         </p>
         <div className="mt-9">

@@ -49,7 +49,7 @@ async function callOpenRouter(system: string, user: string, maxTokens = MAX_TOKE
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
     "HTTP-Referer": referer,
-    "X-Title": "PositionPerfect AI",
+    "X-Title": "beATS",
   };
 
   const startedAt = Date.now();

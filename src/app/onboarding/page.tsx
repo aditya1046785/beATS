@@ -14,7 +14,7 @@ export default async function OnboardingPage() {
         <div className="absolute bottom-[-15%] right-[-10%] h-[28rem] w-[28rem] rounded-full bg-emerald-500/5 blur-3xl" />
       </div>
       <div className="relative mx-auto flex max-w-5xl items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500"><FileText size={17} /></span>PositionPerfect</div>
+        <div className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500"><FileText size={17} /></span>beATS</div>
         <span className="text-sm text-zinc-400">Step setup</span>
       </div>
       <OnboardingForm name={user.name} email={user.email} githubUsername={user.githubUsername} />

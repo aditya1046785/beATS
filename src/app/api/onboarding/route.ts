@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { processGithubForUser } from "@/lib/pipeline";
+import { isProcessing, processGithubForUser } from "@/lib/pipeline";
 import { saveUser } from "@/lib/store";
 
 export async function POST(request: NextRequest) {
   const user = await requireUser();
+  if (isProcessing(user.id)) {
+    return NextResponse.json({ ok: true, alreadyProcessing: true });
+  }
   const body = await request.json();
   const updated = {
     ...user,
@@ -21,6 +24,7 @@ export async function POST(request: NextRequest) {
     onboardingComplete: true,
     githubProcessed: false,
     githubProcessing: true,
+    githubProcessingError: "",
     githubProcessingStage: "We're analyzing your GitHub. This only happens once!",
     githubProcessingProgress: 5,
     githubProcessingCurrentRepo: "",

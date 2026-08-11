@@ -59,7 +59,29 @@ function userFacingError(error: unknown) {
   return "Processing failed. Please try syncing again.";
 }
 
+// Prevents overlapping pipeline runs for the same user (e.g. double-clicking
+// "Try Again" or resubmitting onboarding). In-process only: on process restart
+// the set is empty, so a stale DB flag is not mistaken for an active run.
+const activeProcessing = new Set<string>();
+
+export function isProcessing(userId: string) {
+  return activeProcessing.has(userId);
+}
+
 export async function processGithubForUser(user: UserProfile) {
+  if (activeProcessing.has(user.id)) {
+    console.warn("[pipeline] duplicate run skipped (already processing)", { user: user.githubUsername });
+    return;
+  }
+  activeProcessing.add(user.id);
+  try {
+    await runGithubPipeline(user);
+  } finally {
+    activeProcessing.delete(user.id);
+  }
+}
+
+async function runGithubPipeline(user: UserProfile) {
   const nextRepositories: RepositoryRecord[] = [];
   const existingRepositories = await getUserRepositories(user.id);
   const existingByName = new Map(existingRepositories.map((repo) => [repo.githubRepoName, repo]));
@@ -333,6 +355,7 @@ export async function processGithubForUser(user: UserProfile) {
       if (!current) return;
       current.githubProcessed = true;
       current.githubProcessing = false;
+      current.githubProcessingError = "";
       current.githubProcessingStage = "Done! Taking you to your dashboard...";
       current.githubProcessingProgress = 100;
       current.githubProcessingCurrentRepo = repoSnapshot[repoSnapshot.length - 1]?.name || repoSnapshot[0]?.name || "";
@@ -347,7 +370,11 @@ export async function processGithubForUser(user: UserProfile) {
     });
   } catch (error) {
     if (error instanceof RateLimitError) {
-      await upsertUserRepositories(user.id, nextRepositories);
+      try {
+        await upsertUserRepositories(user.id, nextRepositories);
+      } catch (saveError) {
+        console.error("[pipeline] failed to persist partial repos (rate limit path)", saveError);
+      }
       await updateData((data) => {
         const current = data.users.find((item) => item.id === user.id);
         if (!current) return;
@@ -364,7 +391,11 @@ export async function processGithubForUser(user: UserProfile) {
       return;
     }
 
-    await upsertUserRepositories(user.id, nextRepositories);
+    try {
+      await upsertUserRepositories(user.id, nextRepositories);
+    } catch (saveError) {
+      console.error("[pipeline] failed to persist partial repos after error; clearing processing state anyway", saveError);
+    }
     await updateData((data) => {
       const current = data.users.find((item) => item.id === user.id);
       if (!current) return;

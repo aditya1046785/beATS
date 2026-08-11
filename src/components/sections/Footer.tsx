@@ -21,8 +21,8 @@ export default function Footer() {
         <div className="grid gap-10 md:grid-cols-3">
           <div>
             <div className="inline-flex items-start gap-1 font-heading text-lg font-bold">
-              <span className="text-[#A0A0A0]">Position</span>
-              <span className="text-[#F0F0F0]">Perfect</span>
+              <span className="text-[#A0A0A0]">be</span>
+              <span className="text-[#F0F0F0]">ATS</span>
               <span className="rounded bg-[rgba(59,130,246,0.15)] px-1.5 py-0.5 text-[10px] leading-none text-[#60A5FA]">
                 AI
               </span>
@@ -71,7 +71,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 flex flex-col justify-between gap-3 border-t border-[#111111] pt-6 text-[13px] text-[#333333] md:flex-row">
-          <p>© 2025 PositionPerfect AI. All rights reserved.</p>
+          <p>© 2025 beATS. All rights reserved.</p>
           <p>
             <Link href="/privacy-policy" className="transition-colors duration-150 hover:text-[#F0F0F0]">
               Privacy Policy

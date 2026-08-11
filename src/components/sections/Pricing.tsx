@@ -17,7 +17,7 @@ const plans = [
     mutedLast: true,
   },
   {
-    name: "PositionPerfect",
+    name: "beATS",
     price: "₹199",
     subtext: "one-time, per position",
     oldPrice: "₹499",
@@ -38,7 +38,7 @@ const plans = [
     price: "₹399",
     subtext: "one-time, lifetime access",
     features: [
-      "Everything in PositionPerfect",
+      "Everything in beATS",
       "Unlimited positions (no per-use charge)",
       "Priority processing (< 10 minutes)",
       "Cover letter generation",

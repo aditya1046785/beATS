@@ -97,7 +97,7 @@ export default function SettingsClient({ user, razorpayConfigured }: { user: Use
         key: order.keyId,
         amount: order.amount,
         currency: order.currency,
-        name: "PositionPerfect AI",
+        name: "beATS",
         description: plan === "annual" ? "Annual Pro plan" : "Monthly Pro plan",
         order_id: order.id,
         handler: async (response) => {
