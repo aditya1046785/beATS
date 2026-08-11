@@ -412,6 +412,54 @@ export async function updateData(mutator: (data: AppData) => void | Promise<void
   return data;
 }
 
+// Permanently removes a user and every row that belongs to them (resumes,
+// repositories, payments) from the database, plus their generated PDFs from
+// storage. Unlike updateData/writeData (which only upserts), this issues real
+// DELETE statements so the account and its data are actually gone.
+export async function deleteUserData(userId: string) {
+  const { data: resumes, error: listError } = await supabaseAdmin
+    .from("resumes")
+    .select("id")
+    .eq("user_id", userId);
+  if (listError) throw listError;
+
+  const resumeIds = (resumes ?? []).map((row) => row.id);
+  if (resumeIds.length) {
+    const { error: storageError } = await supabaseAdmin.storage
+      .from("resumes")
+      .remove(resumeIds.map((id) => `${id}.pdf`));
+    // Storage removal is best-effort; a missing file or stale bucket should
+    // not block the account deletion itself.
+    if (storageError) {
+      console.warn("[store] failed to remove resume PDFs from storage", storageError.message);
+    }
+  }
+
+  const { error: resumesError } = await supabaseAdmin
+    .from("resumes")
+    .delete()
+    .eq("user_id", userId);
+  if (resumesError) throw resumesError;
+
+  const { error: reposError } = await supabaseAdmin
+    .from("repositories")
+    .delete()
+    .eq("user_id", userId);
+  if (reposError) throw reposError;
+
+  const { error: paymentsError } = await supabaseAdmin
+    .from("payments")
+    .delete()
+    .eq("user_id", userId);
+  if (paymentsError) throw paymentsError;
+
+  const { error: userError } = await supabaseAdmin
+    .from("users")
+    .delete()
+    .eq("id", userId);
+  if (userError) throw userError;
+}
+
 export async function getUser(id: string) {
   const { data, error } = await supabaseAdmin.from("users").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
