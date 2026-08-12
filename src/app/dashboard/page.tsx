@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Bell, Download, FileText, Github, LayoutDashboard, RotateCw, Search, Settings, UserCircle } from "lucide-react";
@@ -5,6 +6,10 @@ import { requireDashboardUser } from "@/lib/auth";
 import { getUserRepositories, getUserResumes } from "@/lib/store";
 import { formatDate } from "@/lib/formatDate";
 import ResumeGenerator from "./ResumeGenerator";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 function scoreColor(score: number) {
   if (score > 70) return "text-emerald-400";

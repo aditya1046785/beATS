@@ -1,4 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 import type { ReactNode } from "react";
 import { ArrowLeft, Copy, Download, Lock, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { requireDashboardUser } from "@/lib/auth";

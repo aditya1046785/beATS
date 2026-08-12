@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | beATS",
+  title: "Privacy Policy",
   description:
-    "Learn how beATS collects, uses, stores, and protects your information.",
+    "Learn how beATS collects, uses, stores, and protects your GitHub data and personal information when you use the AI resume builder.",
+  alternates: {
+    canonical: "/privacy-policy",
+  },
 };
 
 const lastUpdated = "August 8, 2026";

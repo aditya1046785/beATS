@@ -4,15 +4,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>beATS — Resumes built for the exact role</title>
+  <title>AI Resume Builder from GitHub — Beat the ATS | beATS</title>
   <meta name="description"
-    content="Paste a job description. We rewrite your GitHub projects to match it and generate one tailored resume for that exact role." />
+    content="Turn your GitHub projects into an ATS-optimized resume tailored to any job description. beATS analyzes your repos and rewrites them in the language recruiters scan for." />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet" />
 
   <style>
     /* ============================================================
@@ -78,9 +73,9 @@
       --text-green: #6EE7B7;
       --text-amber: #FCD34D;
 
-      --font-head: 'Space Grotesk', system-ui, sans-serif;
-      --font-body: 'Inter', system-ui, sans-serif;
-      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --font-head: var(--font-space-grotesk), system-ui, sans-serif;
+      --font-body: var(--font-inter), system-ui, sans-serif;
+      --font-mono: var(--font-jetbrains-mono), 'Fira Code', monospace;
 
       --r-sm: 8px;
       --r-md: 12px;
@@ -2737,7 +2732,7 @@
           <h1 class="h1 hero-h1 f1">
             You've built<br>
             real things.<br>
-            <span class="g-violet">Start getting<br>called for them.</span>
+            <span class="g-violet">Let your resume<br>prove it to the ATS.</span>
           </h1>
 
           <p class="lead hero-sub f2">

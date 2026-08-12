@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | beATS",
+  title: "Terms of Service",
   description:
-    "Review the Terms of Service that govern access to and use of beATS.",
+    "Review the Terms of Service governing access to and use of beATS, the AI resume builder for developers.",
+  alternates: {
+    canonical: "/terms-of-service",
+  },
 };
 
 const lastUpdated = "August 8, 2026";
